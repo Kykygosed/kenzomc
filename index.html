@@ -239,14 +239,24 @@
       });
     }
 
-    async function setOnlineStatus(status) {
-      if (currentUser) {
-        await db.collection('users').doc(currentUser.displayName).set({
-          balance: 50,
-          online: status
-        }, { merge: true });
-      }
+async function setOnlineStatus(status) {
+  if (currentUser) {
+    const userRef = db.collection('users').doc(currentUser.displayName);
+    const doc = await userRef.get();
+
+    if (!doc.exists) {
+      // C’est un nouvel utilisateur, on l’initialise à 50µ
+      await userRef.set({
+        balance: 50,
+        online: status
+      });
+    } else {
+      // Utilisateur existant : on ne touche pas au solde
+      await userRef.update({ online: status });
     }
+  }
+}
+
 
     async function initApp() {
       document.getElementById('auth-popup').style.display = 'none';
