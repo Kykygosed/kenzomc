@@ -243,42 +243,66 @@ async function loadOrganisations() {
   snap.forEach(doc => {
     const data = doc.data();
     const div = document.createElement("div");
-    div.innerHTML = `
+
+    const html = `
       <div class="org-header">
         <div>
           <strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ
         </div>
-        <div>
-          <button onclick="recuperer('${doc.id}', ${data.balance})">Récupérer</button>
-          <button onclick="ajouterMembre('${doc.id}')">Ajouter un membre</button>
-        </div>
+        <button class="recuperer-btn" data-orgid="${doc.id}" data-balance="${data.balance}">Récupérer</button>
+        <button class="ajouter-btn" data-orgid="${doc.id}">Ajouter membre</button>
       </div>
     `;
+
+    div.innerHTML = html;
     orgList.appendChild(div);
   });
-}
 
-window.ajouterMembre = async (orgId) => {
-  const pseudo = prompt("Pseudo du membre à ajouter :").trim();
-  if (!pseudo) return;
+  // Ajout des listeners après génération
+  document.querySelectorAll(".recuperer-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const orgId = btn.dataset.orgid;
+      const balance = parseFloat(btn.dataset.balance);
+      const input = prompt("Combien voulez-vous récupérer ?");
+      if (!input) return;
+      const montant = parseFloat(input.replace(",", "."));
+      if (isNaN(montant) || montant <= 0 || montant > balance) {
+        return alert("Montant invalide !");
+      }
 
-  const userRef = db.collection('users').doc(pseudo);
-  const userSnap = await userRef.get();
-  if (!userSnap.exists) return alert("Utilisateur introuvable !");
+      await db.collection('organisations').doc(orgId).update({
+        balance: firebase.firestore.FieldValue.increment(-montant)
+      });
 
-  const orgRef = db.collection('organisations').doc(orgId);
-  const orgSnap = await orgRef.get();
-  const orgData = orgSnap.data();
+      await db.collection('users').doc(currentUser.displayName).update({
+        balance: firebase.firestore.FieldValue.increment(montant)
+      });
 
-  if (orgData.members.includes(pseudo)) return alert("Utilisateur déjà membre.");
-
-  await orgRef.update({
-    members: firebase.firestore.FieldValue.arrayUnion(pseudo)
+      updateBalanceUI();
+      loadOrganisations();
+    });
   });
 
-  alert(`✅ ${pseudo} a été ajouté à l'organisation.`);
-  loadOrganisations();
-};
+  document.querySelectorAll(".ajouter-btn").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      const orgId = btn.dataset.orgid;
+      const pseudo = prompt("Pseudo de la personne à ajouter à l'organisation ?");
+      if (!pseudo) return;
+
+      const userRef = db.collection('users').doc(pseudo);
+      const userSnap = await userRef.get();
+      if (!userSnap.exists) return alert("Utilisateur introuvable.");
+
+      const orgRef = db.collection('organisations').doc(orgId);
+      await orgRef.update({
+        members: firebase.firestore.FieldValue.arrayUnion(pseudo)
+      });
+
+      alert(`${pseudo} ajouté à l'organisation !`);
+      loadOrganisations();
+    });
+  });
+}
 
 
 async function loadOnlineUsers() {
