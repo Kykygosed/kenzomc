@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Virements & Organisations</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script defer src="app.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div id="auth-popup" class="popup">
+    <h2>Connexion</h2>
+    <input id="username" placeholder="Pseudo" />
+    <input id="password" type="password" placeholder="Mot de passe" />
+    <button id="login-btn">Connexion</button>
+    <button id="signup-btn">Inscription</button>
+  </div>
+
+  <div id="main" style="display:none;">
+    <div id="balance">Balance: <span id="user-balance">00,00µ</span></div>
+    <button id="new-org">Nouvelle organisation</button>
+    <div id="org-list"></div>
+    <button id="virement">Virement</button>
+  </div>
+
+  <div id="notification" class="notification"></div>
+  <audio id="chime" src="chime.mp3"></audio>
+</body>
+</html>
