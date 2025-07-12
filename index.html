@@ -2,13 +2,56 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Virements & Organisations</title>
+  <title>Organisations & Virements</title>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
-  <script defer src="app.js"></script>
-  <script defer src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
-  <script defer src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
-  <script defer src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
+  <style>
+    body {
+      font-family: 'Press Start 2P', cursive;
+      background: #111;
+      color: #fff;
+      padding: 20px;
+    }
+
+    button, input {
+      font-family: 'Press Start 2P', cursive;
+      margin: 5px;
+      padding: 10px;
+    }
+
+    .popup {
+      background: #222;
+      padding: 20px;
+      border: 2px solid #fff;
+      width: 300px;
+      margin: 50px auto;
+      text-align: center;
+    }
+
+    .notification {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      background: #555;
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+      font-size: 10px;
+    }
+
+    #org-list > div {
+      margin-top: 10px;
+      padding: 10px;
+      background: #222;
+      border: 1px solid #fff;
+      cursor: pointer;
+    }
+
+    #main {
+      max-width: 600px;
+      margin: auto;
+    }
+
+  </style>
 </head>
 <body>
   <div id="auth-popup" class="popup">
@@ -28,5 +71,204 @@
 
   <div id="notification" class="notification"></div>
   <audio id="chime" src="chime.mp3"></audio>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
+      authDomain: "kykychat-24c7f.firebaseapp.com",
+      databaseURL: "https://kykychat-24c7f-default-rtdb.firebaseio.com",
+      projectId: "kykychat-24c7f",
+      storageBucket: "kykychat-24c7f.firebasestorage.app",
+      messagingSenderId: "342562811927",
+      appId: "1:342562811927:web:0fed1e1f511c4fddcfec52"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    let currentUser = null;
+
+    const loginBtn = document.getElementById('login-btn');
+    const signupBtn = document.getElementById('signup-btn');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const authPopup = document.getElementById('auth-popup');
+    const main = document.getElementById('main');
+    const userBalance = document.getElementById('user-balance');
+    const orgList = document.getElementById('org-list');
+    const chime = document.getElementById('chime');
+
+    async function updateBalanceUI() {
+      const userRef = db.collection('users').doc(currentUser.uid);
+      const doc = await userRef.get();
+      const balance = doc.exists ? doc.data().balance || 0 : 0;
+      userBalance.textContent = balance.toFixed(2) + 'µ';
+    }
+
+    async function listenForVirements() {
+      db.collection('virements')
+        .where('to', '==', currentUser.displayName)
+        .where('seen', '==', false)
+        .onSnapshot(snapshot => {
+          snapshot.docChanges().forEach(async change => {
+            if (change.type === 'added') {
+              const data = change.doc.data();
+              showNotification(`${data.from} vous a fait un virement de ${data.amount.toFixed(2)}µ!`);
+              chime.play();
+              await db.collection('virements').doc(change.doc.id).update({ seen: true });
+              updateBalanceUI();
+            }
+          });
+        });
+
+      // écoute pour organisations
+      db.collection('organisations')
+        .where('members', 'array-contains', currentUser.displayName)
+        .onSnapshot(snapshot => {
+          snapshot.docChanges().forEach(async change => {
+            const org = change.doc.data();
+            if (change.type === 'modified' && change.doc.metadata.hasPendingWrites === false) {
+              showNotification(`${org.lastFrom} a fait un virement de ${org.lastAmount.toFixed(2)}µ à l'organisation ${org.name}`);
+              chime.play();
+            }
+          });
+        });
+    }
+
+    function showNotification(text) {
+      const notif = document.getElementById('notification');
+      notif.textContent = text;
+      notif.style.display = 'block';
+      setTimeout(() => notif.style.display = 'none', 5000);
+    }
+
+    loginBtn.onclick = async () => {
+      const email = usernameInput.value + "@domain.com";
+      const password = passwordInput.value;
+      try {
+        const cred = await auth.signInWithEmailAndPassword(email, password);
+        currentUser = cred.user;
+        onLogin();
+      } catch (e) {
+        alert("Erreur de connexion");
+      }
+    };
+
+    signupBtn.onclick = async () => {
+      const email = usernameInput.value + "@domain.com";
+      const password = passwordInput.value;
+      try {
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        await cred.user.updateProfile({ displayName: usernameInput.value });
+        await db.collection('users').doc(cred.user.uid).set({ balance: 0 });
+        currentUser = cred.user;
+        onLogin();
+      } catch (e) {
+        alert("Erreur d'inscription");
+      }
+    };
+
+    function onLogin() {
+      authPopup.style.display = 'none';
+      main.style.display = 'block';
+      updateBalanceUI();
+      loadOrganisations();
+      listenForVirements();
+    }
+
+    document.getElementById('new-org').onclick = async () => {
+      const orgName = prompt("Nom de l'organisation");
+      if (orgName) {
+        await db.collection('organisations').add({
+          name: orgName,
+          creator: currentUser.displayName,
+          balance: 0,
+          members: [currentUser.displayName],
+          lastAmount: 0,
+          lastFrom: ""
+        });
+        loadOrganisations();
+      }
+    };
+
+    async function loadOrganisations() {
+      orgList.innerHTML = '';
+      const snap = await db.collection('organisations')
+        .where('members', 'array-contains', currentUser.displayName)
+        .get();
+
+      snap.docs.forEach(doc => {
+        const data = doc.data();
+        const div = document.createElement('div');
+        div.innerHTML = `<strong>${data.name}</strong><br/>Créé par: ${data.creator}<br/>Balance: ${data.balance.toFixed(2)}µ`;
+        div.onclick = () => manageOrg(doc.id, data);
+        orgList.appendChild(div);
+      });
+    }
+
+    function manageOrg(id, data) {
+      const name = prompt("Ajouter un utilisateur à l'organisation (pseudo):");
+      if (name) {
+        db.collection('organisations').doc(id).update({
+          members: firebase.firestore.FieldValue.arrayUnion(name)
+        });
+      }
+    }
+
+    document.getElementById('virement').onclick = async () => {
+      const montant = parseFloat(prompt("Montant (ex: 01.00)").replace(',', '.'));
+      if (isNaN(montant) || montant <= 0) return;
+
+      const cible = prompt("Pseudo de l'utilisateur (laisser vide pour organisation)");
+      const userRef = db.collection('users').doc(currentUser.uid);
+      const userSnap = await userRef.get();
+      const currentBalance = userSnap.data().balance || 0;
+
+      if (currentBalance < montant) return alert("Fonds insuffisants");
+
+      if (cible) {
+        const recipient = await db.collection('users').where('displayName', '==', cible).get();
+        if (!recipient.empty) {
+          const recId = recipient.docs[0].id;
+          await db.collection('users').doc(recId).update({
+            balance: firebase.firestore.FieldValue.increment(montant)
+          });
+          await db.collection('virements').add({
+            to: cible,
+            from: currentUser.displayName,
+            amount: montant,
+            seen: false
+          });
+        } else {
+          return alert("Utilisateur introuvable");
+        }
+      } else {
+        const orgName = prompt("Nom de l'organisation");
+        const orgs = await db.collection('organisations').where('name', '==', orgName).get();
+        if (!orgs.empty) {
+          const org = orgs.docs[0];
+          await org.ref.update({
+            balance: firebase.firestore.FieldValue.increment(montant),
+            lastAmount: montant,
+            lastFrom: currentUser.displayName
+          });
+        } else {
+          return alert("Organisation introuvable");
+        }
+      }
+
+      await userRef.update({
+        balance: firebase.firestore.FieldValue.increment(-montant)
+      });
+
+      updateBalanceUI();
+    };
+  </script>
 </body>
 </html>
