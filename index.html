@@ -248,25 +248,38 @@ async function loadOrganisations() {
         <div>
           <strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ
         </div>
-        <button onclick="recuperer('${doc.id}', ${data.balance})">Récupérer</button>
+        <div>
+          <button onclick="recuperer('${doc.id}', ${data.balance})">Récupérer</button>
+          <button onclick="ajouterMembre('${doc.id}')">Ajouter un membre</button>
+        </div>
       </div>
     `;
     orgList.appendChild(div);
   });
 }
 
-window.recuperer = async (orgId, orgBalance) => {
-  const montant = parseFloat(prompt("Combien voulez-vous récupérer ?").replace(",", "."));
-  if (isNaN(montant) || montant <= 0 || montant > orgBalance) return alert("Montant invalide !");
-  await db.collection('organisations').doc(orgId).update({
-    balance: firebase.firestore.FieldValue.increment(-montant)
+window.ajouterMembre = async (orgId) => {
+  const pseudo = prompt("Pseudo du membre à ajouter :").trim();
+  if (!pseudo) return;
+
+  const userRef = db.collection('users').doc(pseudo);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) return alert("Utilisateur introuvable !");
+
+  const orgRef = db.collection('organisations').doc(orgId);
+  const orgSnap = await orgRef.get();
+  const orgData = orgSnap.data();
+
+  if (orgData.members.includes(pseudo)) return alert("Utilisateur déjà membre.");
+
+  await orgRef.update({
+    members: firebase.firestore.FieldValue.arrayUnion(pseudo)
   });
-  await db.collection('users').doc(currentUser.displayName).update({
-    balance: firebase.firestore.FieldValue.increment(montant)
-  });
-  updateBalanceUI();
+
+  alert(`✅ ${pseudo} a été ajouté à l'organisation.`);
   loadOrganisations();
 };
+
 
 async function loadOnlineUsers() {
   onlineUsers.innerHTML = "<h3>En ligne</h3>";
