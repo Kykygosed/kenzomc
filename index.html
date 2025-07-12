@@ -69,24 +69,35 @@
       font-size: 10px;
     }
 
-    #org-list > div {
+    .org-item {
       margin-top: 15px;
       padding: 10px;
       background: #333;
       border: 2px solid #00ffaa;
-      cursor: pointer;
       text-align: left;
     }
 
     #main {
-      max-width: 700px;
+      max-width: 900px;
       margin: auto;
+      display: flex;
+      gap: 20px;
+    }
+
+    #main-content {
+      flex: 2;
+    }
+
+    #sidebar {
+      flex: 1;
+      background: #1a1a1a;
+      border: 2px solid #00ffaa;
+      padding: 10px;
     }
 
     h1, h2, h3 {
       color: #00ffaa;
     }
-
   </style>
 </head>
 <body>
@@ -101,11 +112,18 @@
 
   <!-- Main -->
   <div id="main" style="display:none;">
-    <h1>Bienvenue !</h1>
-    <div id="balance">Balance: <span id="user-balance">00,00µ</span></div>
-    <button id="new-org">Nouvelle organisation</button>
-    <button id="virement">Virement</button>
-    <div id="org-list"></div>
+    <div id="main-content">
+      <h1>Bienvenue !</h1>
+      <div id="balance">Balance: <span id="user-balance">00,00µ</span></div>
+      <button id="new-org">Nouvelle organisation</button>
+      <button id="virement">Virement</button>
+      <div id="org-list"></div>
+    </div>
+
+    <div id="sidebar">
+      <h3>Utilisateurs en ligne</h3>
+      <div id="online-users"></div>
+    </div>
   </div>
 
   <!-- Notification -->
@@ -120,8 +138,7 @@
       <input id="virement-destinataire" placeholder="Pseudo (ou vide)" />
       <select id="virement-organisation">
         <option value="">Aucune organisation</option>
-      </select>
-      <br><br>
+      </select><br><br>
       <button id="confirm-virement">Envoyer</button>
       <button onclick="toggleModal(false)">Annuler</button>
     </div>
@@ -136,11 +153,7 @@
     const firebaseConfig = {
       apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
       authDomain: "kykychat-24c7f.firebaseapp.com",
-      databaseURL: "https://kykychat-24c7f-default-rtdb.firebaseio.com",
       projectId: "kykychat-24c7f",
-      storageBucket: "kykychat-24c7f.firebasestorage.app",
-      messagingSenderId: "342562811927",
-      appId: "1:342562811927:web:0fed1e1f511c4fddcfec52"
     };
 
     firebase.initializeApp(firebaseConfig);
@@ -157,6 +170,7 @@
     const orgList = document.getElementById('org-list');
     const chime = document.getElementById('chime');
     const notif = document.getElementById('notification');
+    const onlineUsersDiv = document.getElementById('online-users');
 
     const modal = document.getElementById('virement-modal');
     const montantInput = document.getElementById('virement-montant');
@@ -208,19 +222,6 @@
             }
           });
         });
-
-      db.collection('organisations')
-        .where('members', 'array-contains', currentUser.displayName)
-        .onSnapshot(snapshot => {
-          snapshot.docChanges().forEach(change => {
-            if (change.type === 'modified') {
-              const data = change.doc.data();
-              if (data.lastAmount > 0) {
-                showNotification(`${data.lastFrom} a fait un virement de ${data.lastAmount.toFixed(2)}µ à l'organisation ${data.name}`);
-              }
-            }
-          });
-        });
     }
 
     loginBtn.onclick = async () => {
@@ -229,6 +230,7 @@
         const pass = passwordInput.value;
         const userCred = await auth.signInWithEmailAndPassword(email, pass);
         currentUser = userCred.user;
+        await db.collection('users').doc(currentUser.uid).update({ online: true });
         initApp();
       } catch {
         alert("Erreur de connexion !");
@@ -241,7 +243,7 @@
         const pass = passwordInput.value;
         const userCred = await auth.createUserWithEmailAndPassword(email, pass);
         await userCred.user.updateProfile({ displayName: usernameInput.value });
-        await db.collection('users').doc(userCred.user.uid).set({ balance: 50 });
+        await db.collection('users').doc(userCred.user.uid).set({ balance: 50, online: true });
         currentUser = userCred.user;
         initApp();
       } catch {
@@ -249,11 +251,54 @@
       }
     };
 
+    async function loadOrganisations() {
+      orgList.innerHTML = "";
+      const snap = await db.collection('organisations').get();
+      snap.forEach(doc => {
+        const data = doc.data();
+        const div = document.createElement("div");
+        div.className = "org-item";
+        div.innerHTML = `<strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ<br>`;
+        const btn = document.createElement("button");
+        btn.textContent = "Récupérer";
+        btn.onclick = async () => {
+          const montant = prompt("Montant à récupérer ?");
+          const m = parseFloat(montant.replace(",", "."));
+          if (isNaN(m) || m <= 0) return;
+          if (data.balance < m) return alert("Pas assez de fonds dans l'organisation.");
+          await db.collection('organisations').doc(doc.id).update({
+            balance: firebase.firestore.FieldValue.increment(-m)
+          });
+          await db.collection('users').doc(currentUser.uid).update({
+            balance: firebase.firestore.FieldValue.increment(m)
+          });
+          updateBalanceUI();
+          loadOrganisations();
+        };
+        div.appendChild(btn);
+        orgList.appendChild(div);
+      });
+    }
+
+    function loadOnlineUsers() {
+      db.collection('users').where("online", "==", true)
+        .onSnapshot(snap => {
+          onlineUsersDiv.innerHTML = "";
+          snap.forEach(doc => {
+            const data = doc.data();
+            const div = document.createElement("div");
+            div.textContent = doc.id + " (" + (data.displayName || "??") + ")";
+            onlineUsersDiv.appendChild(div);
+          });
+        });
+    }
+
     function initApp() {
       document.getElementById('auth-popup').style.display = 'none';
-      document.getElementById('main').style.display = 'block';
+      document.getElementById('main').style.display = 'flex';
       updateBalanceUI();
       loadOrganisations();
+      loadOnlineUsers();
       listenForVirements();
     }
 
@@ -270,27 +315,6 @@
       });
       loadOrganisations();
     };
-
-    async function loadOrganisations() {
-      orgList.innerHTML = "";
-      const snap = await db.collection('organisations')
-        .where('members', 'array-contains', currentUser.displayName).get();
-
-      snap.forEach(doc => {
-        const data = doc.data();
-        const div = document.createElement("div");
-        div.innerHTML = `<strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ`;
-        div.onclick = () => {
-          const newUser = prompt("Ajouter un utilisateur à cette organisation:");
-          if (newUser) {
-            db.collection('organisations').doc(doc.id).update({
-              members: firebase.firestore.FieldValue.arrayUnion(newUser)
-            });
-          }
-        };
-        orgList.appendChild(div);
-      });
-    }
 
     document.getElementById('virement').onclick = () => toggleModal(true);
 
@@ -335,6 +359,12 @@
       toggleModal(false);
       updateBalanceUI();
     };
+
+    window.addEventListener('beforeunload', () => {
+      if (currentUser) {
+        db.collection('users').doc(currentUser.uid).update({ online: false });
+      }
+    });
   </script>
 </body>
 </html>
