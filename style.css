@@ -1,0 +1,31 @@
+body {
+  font-family: 'Press Start 2P', cursive;
+  background: #111;
+  color: #fff;
+  padding: 20px;
+}
+
+button, input {
+  font-family: 'Press Start 2P', cursive;
+  margin: 5px;
+  padding: 10px;
+}
+
+.popup {
+  background: #222;
+  padding: 20px;
+  border: 2px solid #fff;
+  width: 300px;
+  margin: 50px auto;
+  text-align: center;
+}
+
+.notification {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  background: #555;
+  padding: 10px;
+  border-radius: 5px;
+  display: none;
+}
