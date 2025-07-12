@@ -1,139 +1,136 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Organisations & Virements</title>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
   <style>
-    * {
-      font-family: 'Press Start 2P', cursive;
-      box-sizing: border-box;
-    }
-
     body {
-      margin: 0;
-      background: #121212;
+      font-family: 'Press Start 2P', cursive;
+      background: linear-gradient(to bottom, #1a1a1a, #111);
       color: #fff;
-      display: flex;
-      height: 100vh;
-    }
-
-    #orgs, #onlineUsers {
-      width: 20%;
-      background: #1e1e1e;
-      padding: 10px;
-      overflow-y: auto;
-    }
-
-    #main {
-      flex: 1;
-      padding: 20px;
+      padding: 30px;
       text-align: center;
-      position: relative;
+    }
+
+    input, button, select {
+      font-family: 'Press Start 2P', cursive;
+      padding: 10px;
+      margin: 5px;
+      border: none;
+      outline: none;
+      border-radius: 5px;
+    }
+
+    input, select {
+      width: 80%;
+      font-size: 10px;
     }
 
     button {
-      background: #00cc88;
-      border: none;
-      color: white;
-      padding: 10px;
-      margin: 10px;
+      background: #00ffaa;
+      color: #000;
       cursor: pointer;
-    }
-
-    .popup, .transfer-popup {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: #2c2c2c;
-      padding: 30px;
-      border: 3px solid white;
-      display: none;
-      z-index: 10;
-    }
-
-    .popup input, .transfer-popup input, select {
-      margin: 10px;
-      padding: 10px;
-      font-family: 'Press Start 2P', cursive;
       font-size: 10px;
-      width: 80%;
     }
 
-    .notif {
+    .popup, .modal {
+      background: #222;
+      border: 2px solid #00ffaa;
+      padding: 20px;
+      width: 320px;
+      margin: 20px auto;
+      box-shadow: 0 0 10px #00ffaa;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .notification {
       position: fixed;
       bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #ccc;
-      color: black;
+      left: 10px;
+      background: #555;
       padding: 10px;
-      z-index: 20;
+      border-radius: 5px;
       display: none;
+      font-size: 10px;
     }
 
-    ul {
-      list-style: none;
-      padding: 0;
-    }
-
-    li {
-      margin-bottom: 10px;
+    #org-list > div {
+      margin-top: 15px;
+      padding: 10px;
+      background: #333;
+      border: 2px solid #00ffaa;
       cursor: pointer;
+      text-align: left;
     }
+
+    #main {
+      max-width: 700px;
+      margin: auto;
+    }
+
+    h1, h2, h3 {
+      color: #00ffaa;
+    }
+
   </style>
 </head>
 <body>
-  <div id="orgs">
-    <h3>Organisations</h3>
-    <ul id="orgList"></ul>
+  <!-- Auth -->
+  <div id="auth-popup" class="popup">
+    <h2>Connexion</h2>
+    <input id="username" placeholder="Pseudo" /><br>
+    <input id="password" type="password" placeholder="Mot de passe" /><br>
+    <button id="login-btn">Connexion</button>
+    <button id="signup-btn">Inscription</button>
   </div>
 
-  <div id="main">
-    <h2>Balance: <span id="userBalance">--,--µ</span></h2>
-    <button onclick="showOrgPopup()">Nouvelle organisation</button>
-    <button onclick="showTransferPopup()">Virement</button>
-    <ul id="myOrgs"></ul>
-  </div>
-
-  <div id="onlineUsers">
-    <h3>En ligne</h3>
-    <ul id="userList"></ul>
-  </div>
-
-  <!-- Login -->
-  <div class="popup" id="loginPopup">
-    <h3>Connexion</h3>
-    <input id="loginPseudo" placeholder="Pseudo">
-    <input id="loginPass" type="password" placeholder="Mot de passe">
-    <button onclick="login()">Se connecter</button>
-    <button onclick="register()">S'inscrire</button>
-  </div>
-
-  <!-- Organisation popup -->
-  <div class="popup" id="orgPopup">
-    <input id="newOrgName" placeholder="Nom organisation">
-    <button onclick="createOrg()">Créer</button>
-  </div>
-
-  <!-- Virement popup -->
-  <div class="transfer-popup" id="transferPopup">
-    <input id="amount" placeholder="Montant (ex: 01,00)">
-    <input id="toUser" placeholder="Pseudo destinataire (facultatif)">
-    <select id="orgSelect">
-      <option value="">Organisation (facultatif)</option>
-    </select>
-    <button onclick="makeTransfer()">Envoyer</button>
+  <!-- Main -->
+  <div id="main" style="display:none;">
+    <h1>Bienvenue !</h1>
+    <div id="balance">Balance: <span id="user-balance">00,00µ</span></div>
+    <button id="new-org">Nouvelle organisation</button>
+    <button id="virement">Virement</button>
+    <div id="org-list"></div>
   </div>
 
   <!-- Notification -->
-  <div class="notif" id="notif"></div>
+  <div id="notification" class="notification"></div>
+  <audio id="chime" src="chime.mp3"></audio>
 
-  <audio id="chime" src="chime.mp3" preload="auto"></audio>
+  <!-- Virement Modal -->
+  <div class="modal-overlay" id="virement-modal">
+    <div class="modal">
+      <h3>Faire un virement</h3>
+      <input id="virement-montant" placeholder="Montant (ex: 01,00µ)" />
+      <input id="virement-destinataire" placeholder="Pseudo (ou vide)" />
+      <select id="virement-organisation">
+        <option value="">Aucune organisation</option>
+      </select>
+      <br><br>
+      <button id="confirm-virement">Envoyer</button>
+      <button onclick="toggleModal(false)">Annuler</button>
+    </div>
+  </div>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
 
   <script>
     const firebaseConfig = {
@@ -148,179 +145,196 @@
 
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
-    const db = firebase.database();
+    const db = firebase.firestore();
 
-    let currentUser;
+    let currentUser = null;
 
-    window.onload = () => {
-      document.getElementById("loginPopup").style.display = "block";
+    const loginBtn = document.getElementById('login-btn');
+    const signupBtn = document.getElementById('signup-btn');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const userBalance = document.getElementById('user-balance');
+    const orgList = document.getElementById('org-list');
+    const chime = document.getElementById('chime');
+    const notif = document.getElementById('notification');
+
+    const modal = document.getElementById('virement-modal');
+    const montantInput = document.getElementById('virement-montant');
+    const destinataireInput = document.getElementById('virement-destinataire');
+    const organisationSelect = document.getElementById('virement-organisation');
+
+    function toggleModal(show = true) {
+      modal.classList.toggle("active", show);
+      if (show) {
+        montantInput.value = "";
+        destinataireInput.value = "";
+        organisationSelect.innerHTML = `<option value="">Aucune organisation</option>`;
+        db.collection('organisations').get().then(snapshot => {
+          snapshot.forEach(doc => {
+            const opt = document.createElement("option");
+            opt.value = doc.id;
+            opt.textContent = doc.data().name;
+            organisationSelect.appendChild(opt);
+          });
+        });
+      }
+    }
+
+    async function updateBalanceUI() {
+      const userRef = db.collection('users').doc(currentUser.uid);
+      const doc = await userRef.get();
+      const balance = doc.exists ? doc.data().balance || 0 : 0;
+      userBalance.textContent = balance.toFixed(2) + 'µ';
+    }
+
+    function showNotification(msg) {
+      notif.textContent = msg;
+      notif.style.display = 'block';
+      chime.play();
+      setTimeout(() => notif.style.display = 'none', 5000);
+    }
+
+    async function listenForVirements() {
+      db.collection('virements')
+        .where('to', '==', currentUser.displayName)
+        .where('seen', '==', false)
+        .onSnapshot(snapshot => {
+          snapshot.docChanges().forEach(async change => {
+            if (change.type === 'added') {
+              const data = change.doc.data();
+              showNotification(`${data.from} vous a fait un virement de ${data.amount.toFixed(2)}µ!`);
+              await db.collection('virements').doc(change.doc.id).update({ seen: true });
+              updateBalanceUI();
+            }
+          });
+        });
+
+      db.collection('organisations')
+        .where('members', 'array-contains', currentUser.displayName)
+        .onSnapshot(snapshot => {
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'modified') {
+              const data = change.doc.data();
+              if (data.lastAmount > 0) {
+                showNotification(`${data.lastFrom} a fait un virement de ${data.lastAmount.toFixed(2)}µ à l'organisation ${data.name}`);
+              }
+            }
+          });
+        });
+    }
+
+    loginBtn.onclick = async () => {
+      try {
+        const email = usernameInput.value + "@mail.com";
+        const pass = passwordInput.value;
+        const userCred = await auth.signInWithEmailAndPassword(email, pass);
+        currentUser = userCred.user;
+        initApp();
+      } catch {
+        alert("Erreur de connexion !");
+      }
     };
 
-    function login() {
-      const email = loginPseudo.value + "@domain.com";
-      const pass = loginPass.value;
-      auth.signInWithEmailAndPassword(email, pass).then(() => {
-        document.getElementById("loginPopup").style.display = "none";
-        afterLogin();
-      });
+    signupBtn.onclick = async () => {
+      try {
+        const email = usernameInput.value + "@mail.com";
+        const pass = passwordInput.value;
+        const userCred = await auth.createUserWithEmailAndPassword(email, pass);
+        await userCred.user.updateProfile({ displayName: usernameInput.value });
+        await db.collection('users').doc(userCred.user.uid).set({ balance: 50 });
+        currentUser = userCred.user;
+        initApp();
+      } catch {
+        alert("Erreur d'inscription !");
+      }
+    };
+
+    function initApp() {
+      document.getElementById('auth-popup').style.display = 'none';
+      document.getElementById('main').style.display = 'block';
+      updateBalanceUI();
+      loadOrganisations();
+      listenForVirements();
     }
 
-    function register() {
-      const email = loginPseudo.value + "@domain.com";
-      const pass = loginPass.value;
-      auth.createUserWithEmailAndPassword(email, pass).then((cred) => {
-        db.ref("users/" + loginPseudo.value).set({ balance: 50.00 });
-        document.getElementById("loginPopup").style.display = "none";
-        afterLogin();
+    document.getElementById('new-org').onclick = async () => {
+      const name = prompt("Nom de l'organisation");
+      if (!name) return;
+      await db.collection('organisations').add({
+        name,
+        creator: currentUser.displayName,
+        balance: 0,
+        members: [currentUser.displayName],
+        lastAmount: 0,
+        lastFrom: ""
       });
-    }
+      loadOrganisations();
+    };
 
-    function afterLogin() {
-      currentUser = auth.currentUser.email.split("@")[0];
-      db.ref("online/" + currentUser).set(true);
-      db.ref("online/" + currentUser).onDisconnect().remove();
+    async function loadOrganisations() {
+      orgList.innerHTML = "";
+      const snap = await db.collection('organisations')
+        .where('members', 'array-contains', currentUser.displayName).get();
 
-      db.ref("users/" + currentUser + "/balance").on("value", snap => {
-        const val = snap.val() || 0;
-        userBalance.textContent = val.toFixed(2).replace(".", ",") + "µ";
-      });
-
-      db.ref("organisations").on("value", snap => {
-        const orgList = orgListEl => {
-          orgListEl.innerHTML = '';
-          Object.entries(snap.val() || {}).forEach(([name, data]) => {
-            const li = document.createElement("li");
-            li.textContent = name;
-            li.onclick = () => showOrgDetails(name);
-            orgListEl.appendChild(li);
-          });
+      snap.forEach(doc => {
+        const data = doc.data();
+        const div = document.createElement("div");
+        div.innerHTML = `<strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ`;
+        div.onclick = () => {
+          const newUser = prompt("Ajouter un utilisateur à cette organisation:");
+          if (newUser) {
+            db.collection('organisations').doc(doc.id).update({
+              members: firebase.firestore.FieldValue.arrayUnion(newUser)
+            });
+          }
         };
-        orgList(orgList);
-        updateOrgDropdown(snap.val());
-      });
-
-      db.ref("users").on("value", snap => {
-        const userList = document.getElementById("userList");
-        userList.innerHTML = '';
-        Object.keys(snap.val() || {}).forEach(u => {
-          if (snap.val()[u]) {
-            const li = document.createElement("li");
-            li.textContent = u;
-            userList.appendChild(li);
-          }
-        });
-      });
-
-      db.ref("online").on("value", snap => {
-        const online = Object.keys(snap.val() || {});
-        const userList = document.getElementById("userList");
-        userList.innerHTML = '';
-        online.forEach(user => {
-          const li = document.createElement("li");
-          li.textContent = user;
-          userList.appendChild(li);
-        });
-      });
-
-      db.ref("transfers").on("child_added", snap => {
-        const t = snap.val();
-        if (t.to === currentUser) {
-          showNotif(`${t.from} vous a fait un virement de ${t.amount.replace(".", ",")}µ!`);
-          document.getElementById("chime").play();
-        } else if (t.org && isInOrg(t.org)) {
-          showNotif(`${t.from} a fait un virement de ${t.amount.replace(".", ",")}µ à l'organisation ${t.org}!`);
-          document.getElementById("chime").play();
-        }
-      });
-
-      loadMyOrgs();
-    }
-
-    function showNotif(text) {
-      notif.textContent = text;
-      notif.style.display = "block";
-      setTimeout(() => notif.style.display = "none", 5000);
-    }
-
-    function showOrgPopup() {
-      orgPopup.style.display = "block";
-    }
-
-    function createOrg() {
-      const name = newOrgName.value;
-      db.ref("organisations/" + name).set({ creator: currentUser, balance: 0, members: { [currentUser]: true } });
-      orgPopup.style.display = "none";
-      loadMyOrgs();
-    }
-
-    function loadMyOrgs() {
-      db.ref("organisations").once("value", snap => {
-        myOrgs.innerHTML = '';
-        Object.entries(snap.val() || {}).forEach(([name, data]) => {
-          if (data.members && data.members[currentUser]) {
-            const li = document.createElement("li");
-            li.innerHTML = `${name}<br><small>Créateur: ${data.creator}</small><br>Balance: ${data.balance.toFixed(2).replace(".", ",")}µ<br><button onclick="addMember('${name}')">Ajouter</button>`;
-            myOrgs.appendChild(li);
-          }
-        });
+        orgList.appendChild(div);
       });
     }
 
-    function addMember(orgName) {
-      const pseudo = prompt("Pseudo à ajouter :");
-      db.ref("organisations/" + orgName + "/members/" + pseudo).set(true);
-    }
+    document.getElementById('virement').onclick = () => toggleModal(true);
 
-    function updateOrgDropdown(data) {
-      orgSelect.innerHTML = '<option value="">Organisation (facultatif)</option>';
-      Object.keys(data || {}).forEach(name => {
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        orgSelect.appendChild(option);
-      });
-    }
+    document.getElementById('confirm-virement').onclick = async () => {
+      const montant = parseFloat(montantInput.value.replace(",", "."));
+      const destinataire = destinataireInput.value.trim();
+      const orgId = organisationSelect.value;
 
-    function showTransferPopup() {
-      transferPopup.style.display = "block";
-    }
+      if (isNaN(montant) || montant <= 0) return;
 
-    function makeTransfer() {
-      const amount = parseFloat(amountInput.value.replace(",", "."));
-      const toUser = toUserInput.value;
-      const toOrg = orgSelect.value;
+      const userRef = db.collection('users').doc(currentUser.uid);
+      const userSnap = await userRef.get();
+      const solde = userSnap.data().balance || 0;
+      if (solde < montant) return alert("Pas assez d'argent !");
 
-      db.ref("users/" + currentUser + "/balance").once("value", snap => {
-        const bal = snap.val() || 0;
-        if (amount > bal) return alert("Fonds insuffisants");
-
-        db.ref("users/" + currentUser + "/balance").set(bal - amount);
-        if (toUser) {
-          db.ref("users/" + toUser + "/balance").once("value", s => {
-            const b = s.val() || 0;
-            db.ref("users/" + toUser + "/balance").set(b + amount);
-            db.ref("transfers").push({ from: currentUser, to: toUser, amount });
+      if (destinataire) {
+        const users = await db.collection('users').where('displayName', '==', destinataire).get();
+        if (!users.empty) {
+          await db.collection('users').doc(users.docs[0].id).update({
+            balance: firebase.firestore.FieldValue.increment(montant)
           });
-        } else if (toOrg) {
-          db.ref("organisations/" + toOrg + "/balance").once("value", s => {
-            const b = s.val() || 0;
-            db.ref("organisations/" + toOrg + "/balance").set(b + amount);
-            db.ref("transfers").push({ from: currentUser, org: toOrg, amount });
+          await db.collection('virements').add({
+            to: destinataire,
+            from: currentUser.displayName,
+            amount: montant,
+            seen: false
           });
         }
+      } else if (orgId) {
+        const orgRef = db.collection('organisations').doc(orgId);
+        await orgRef.update({
+          balance: firebase.firestore.FieldValue.increment(montant),
+          lastAmount: montant,
+          lastFrom: currentUser.displayName
+        });
+      }
 
-        transferPopup.style.display = "none";
+      await userRef.update({
+        balance: firebase.firestore.FieldValue.increment(-montant)
       });
-    }
 
-    function isInOrg(orgName) {
-      const orgs = document.querySelectorAll("#myOrgs li");
-      return [...orgs].some(li => li.innerHTML.includes(orgName));
-    }
-
-    function showOrgDetails(name) {
-      alert("TODO: Voir détails ou membres — déjà dans votre liste s’ils vous ont ajouté.");
-    }
+      toggleModal(false);
+      updateBalanceUI();
+    };
   </script>
 </body>
 </html>
