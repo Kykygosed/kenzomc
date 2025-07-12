@@ -7,24 +7,55 @@
   <style>
     body {
       font-family: 'Press Start 2P', cursive;
-      background: #111;
+      background: linear-gradient(to bottom, #1a1a1a, #111);
       color: #fff;
-      padding: 20px;
-    }
-
-    button, input {
-      font-family: 'Press Start 2P', cursive;
-      margin: 5px;
-      padding: 10px;
-    }
-
-    .popup {
-      background: #222;
-      padding: 20px;
-      border: 2px solid #fff;
-      width: 300px;
-      margin: 50px auto;
+      padding: 30px;
       text-align: center;
+    }
+
+    input, button, select {
+      font-family: 'Press Start 2P', cursive;
+      padding: 10px;
+      margin: 5px;
+      border: none;
+      outline: none;
+      border-radius: 5px;
+    }
+
+    input, select {
+      width: 80%;
+      font-size: 10px;
+    }
+
+    button {
+      background: #00ffaa;
+      color: #000;
+      cursor: pointer;
+      font-size: 10px;
+    }
+
+    .popup, .modal {
+      background: #222;
+      border: 2px solid #00ffaa;
+      padding: 20px;
+      width: 320px;
+      margin: 20px auto;
+      box-shadow: 0 0 10px #00ffaa;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+    }
+
+    .modal-overlay.active {
+      display: flex;
     }
 
     .notification {
@@ -39,40 +70,64 @@
     }
 
     #org-list > div {
-      margin-top: 10px;
+      margin-top: 15px;
       padding: 10px;
-      background: #222;
-      border: 1px solid #fff;
+      background: #333;
+      border: 2px solid #00ffaa;
       cursor: pointer;
+      text-align: left;
     }
 
     #main {
-      max-width: 600px;
+      max-width: 700px;
       margin: auto;
+    }
+
+    h1, h2, h3 {
+      color: #00ffaa;
     }
 
   </style>
 </head>
 <body>
+  <!-- Auth -->
   <div id="auth-popup" class="popup">
     <h2>Connexion</h2>
-    <input id="username" placeholder="Pseudo" />
-    <input id="password" type="password" placeholder="Mot de passe" />
+    <input id="username" placeholder="Pseudo" /><br>
+    <input id="password" type="password" placeholder="Mot de passe" /><br>
     <button id="login-btn">Connexion</button>
     <button id="signup-btn">Inscription</button>
   </div>
 
+  <!-- Main -->
   <div id="main" style="display:none;">
+    <h1>Bienvenue !</h1>
     <div id="balance">Balance: <span id="user-balance">00,00µ</span></div>
     <button id="new-org">Nouvelle organisation</button>
-    <div id="org-list"></div>
     <button id="virement">Virement</button>
+    <div id="org-list"></div>
   </div>
 
+  <!-- Notification -->
   <div id="notification" class="notification"></div>
   <audio id="chime" src="chime.mp3"></audio>
 
-  <!-- Firebase SDKs -->
+  <!-- Virement Modal -->
+  <div class="modal-overlay" id="virement-modal">
+    <div class="modal">
+      <h3>Faire un virement</h3>
+      <input id="virement-montant" placeholder="Montant (ex: 01,00µ)" />
+      <input id="virement-destinataire" placeholder="Pseudo (ou vide)" />
+      <select id="virement-organisation">
+        <option value="">Aucune organisation</option>
+      </select>
+      <br><br>
+      <button id="confirm-virement">Envoyer</button>
+      <button onclick="toggleModal(false)">Annuler</button>
+    </div>
+  </div>
+
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
@@ -98,17 +153,45 @@
     const signupBtn = document.getElementById('signup-btn');
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
-    const authPopup = document.getElementById('auth-popup');
-    const main = document.getElementById('main');
     const userBalance = document.getElementById('user-balance');
     const orgList = document.getElementById('org-list');
     const chime = document.getElementById('chime');
+    const notif = document.getElementById('notification');
+
+    const modal = document.getElementById('virement-modal');
+    const montantInput = document.getElementById('virement-montant');
+    const destinataireInput = document.getElementById('virement-destinataire');
+    const organisationSelect = document.getElementById('virement-organisation');
+
+    function toggleModal(show = true) {
+      modal.classList.toggle("active", show);
+      if (show) {
+        montantInput.value = "";
+        destinataireInput.value = "";
+        organisationSelect.innerHTML = `<option value="">Aucune organisation</option>`;
+        db.collection('organisations').get().then(snapshot => {
+          snapshot.forEach(doc => {
+            const opt = document.createElement("option");
+            opt.value = doc.id;
+            opt.textContent = doc.data().name;
+            organisationSelect.appendChild(opt);
+          });
+        });
+      }
+    }
 
     async function updateBalanceUI() {
       const userRef = db.collection('users').doc(currentUser.uid);
       const doc = await userRef.get();
       const balance = doc.exists ? doc.data().balance || 0 : 0;
       userBalance.textContent = balance.toFixed(2) + 'µ';
+    }
+
+    function showNotification(msg) {
+      notif.textContent = msg;
+      notif.style.display = 'block';
+      chime.play();
+      setTimeout(() => notif.style.display = 'none', 5000);
     }
 
     async function listenForVirements() {
@@ -120,155 +203,139 @@
             if (change.type === 'added') {
               const data = change.doc.data();
               showNotification(`${data.from} vous a fait un virement de ${data.amount.toFixed(2)}µ!`);
-              chime.play();
               await db.collection('virements').doc(change.doc.id).update({ seen: true });
               updateBalanceUI();
             }
           });
         });
 
-      // écoute pour organisations
       db.collection('organisations')
         .where('members', 'array-contains', currentUser.displayName)
         .onSnapshot(snapshot => {
-          snapshot.docChanges().forEach(async change => {
-            const org = change.doc.data();
-            if (change.type === 'modified' && change.doc.metadata.hasPendingWrites === false) {
-              showNotification(`${org.lastFrom} a fait un virement de ${org.lastAmount.toFixed(2)}µ à l'organisation ${org.name}`);
-              chime.play();
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'modified') {
+              const data = change.doc.data();
+              if (data.lastAmount > 0) {
+                showNotification(`${data.lastFrom} a fait un virement de ${data.lastAmount.toFixed(2)}µ à l'organisation ${data.name}`);
+              }
             }
           });
         });
     }
 
-    function showNotification(text) {
-      const notif = document.getElementById('notification');
-      notif.textContent = text;
-      notif.style.display = 'block';
-      setTimeout(() => notif.style.display = 'none', 5000);
-    }
-
     loginBtn.onclick = async () => {
-      const email = usernameInput.value + "@domain.com";
-      const password = passwordInput.value;
       try {
-        const cred = await auth.signInWithEmailAndPassword(email, password);
-        currentUser = cred.user;
-        onLogin();
-      } catch (e) {
-        alert("Erreur de connexion");
+        const email = usernameInput.value + "@mail.com";
+        const pass = passwordInput.value;
+        const userCred = await auth.signInWithEmailAndPassword(email, pass);
+        currentUser = userCred.user;
+        initApp();
+      } catch {
+        alert("Erreur de connexion !");
       }
     };
 
     signupBtn.onclick = async () => {
-      const email = usernameInput.value + "@domain.com";
-      const password = passwordInput.value;
       try {
-        const cred = await auth.createUserWithEmailAndPassword(email, password);
-        await cred.user.updateProfile({ displayName: usernameInput.value });
-        await db.collection('users').doc(cred.user.uid).set({ balance: 0 });
-        currentUser = cred.user;
-        onLogin();
-      } catch (e) {
-        alert("Erreur d'inscription");
+        const email = usernameInput.value + "@mail.com";
+        const pass = passwordInput.value;
+        const userCred = await auth.createUserWithEmailAndPassword(email, pass);
+        await userCred.user.updateProfile({ displayName: usernameInput.value });
+        await db.collection('users').doc(userCred.user.uid).set({ balance: 50 });
+        currentUser = userCred.user;
+        initApp();
+      } catch {
+        alert("Erreur d'inscription !");
       }
     };
 
-    function onLogin() {
-      authPopup.style.display = 'none';
-      main.style.display = 'block';
+    function initApp() {
+      document.getElementById('auth-popup').style.display = 'none';
+      document.getElementById('main').style.display = 'block';
       updateBalanceUI();
       loadOrganisations();
       listenForVirements();
     }
 
     document.getElementById('new-org').onclick = async () => {
-      const orgName = prompt("Nom de l'organisation");
-      if (orgName) {
-        await db.collection('organisations').add({
-          name: orgName,
-          creator: currentUser.displayName,
-          balance: 0,
-          members: [currentUser.displayName],
-          lastAmount: 0,
-          lastFrom: ""
-        });
-        loadOrganisations();
-      }
+      const name = prompt("Nom de l'organisation");
+      if (!name) return;
+      await db.collection('organisations').add({
+        name,
+        creator: currentUser.displayName,
+        balance: 0,
+        members: [currentUser.displayName],
+        lastAmount: 0,
+        lastFrom: ""
+      });
+      loadOrganisations();
     };
 
     async function loadOrganisations() {
-      orgList.innerHTML = '';
+      orgList.innerHTML = "";
       const snap = await db.collection('organisations')
-        .where('members', 'array-contains', currentUser.displayName)
-        .get();
+        .where('members', 'array-contains', currentUser.displayName).get();
 
-      snap.docs.forEach(doc => {
+      snap.forEach(doc => {
         const data = doc.data();
-        const div = document.createElement('div');
-        div.innerHTML = `<strong>${data.name}</strong><br/>Créé par: ${data.creator}<br/>Balance: ${data.balance.toFixed(2)}µ`;
-        div.onclick = () => manageOrg(doc.id, data);
+        const div = document.createElement("div");
+        div.innerHTML = `<strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ`;
+        div.onclick = () => {
+          const newUser = prompt("Ajouter un utilisateur à cette organisation:");
+          if (newUser) {
+            db.collection('organisations').doc(doc.id).update({
+              members: firebase.firestore.FieldValue.arrayUnion(newUser)
+            });
+          }
+        };
         orgList.appendChild(div);
       });
     }
 
-    function manageOrg(id, data) {
-      const name = prompt("Ajouter un utilisateur à l'organisation (pseudo):");
-      if (name) {
-        db.collection('organisations').doc(id).update({
-          members: firebase.firestore.FieldValue.arrayUnion(name)
-        });
-      }
-    }
+    document.getElementById('virement').onclick = () => toggleModal(true);
 
-    document.getElementById('virement').onclick = async () => {
-      const montant = parseFloat(prompt("Montant (ex: 01.00)").replace(',', '.'));
+    document.getElementById('confirm-virement').onclick = async () => {
+      const montant = parseFloat(montantInput.value.replace(",", "."));
+      const destinataire = destinataireInput.value.trim();
+      const orgId = organisationSelect.value;
+
       if (isNaN(montant) || montant <= 0) return;
 
-      const cible = prompt("Pseudo de l'utilisateur (laisser vide pour organisation)");
       const userRef = db.collection('users').doc(currentUser.uid);
       const userSnap = await userRef.get();
-      const currentBalance = userSnap.data().balance || 0;
+      const solde = userSnap.data().balance || 0;
+      if (solde < montant) return alert("Pas assez d'argent !");
 
-      if (currentBalance < montant) return alert("Fonds insuffisants");
-
-      if (cible) {
-        const recipient = await db.collection('users').where('displayName', '==', cible).get();
-        if (!recipient.empty) {
-          const recId = recipient.docs[0].id;
-          await db.collection('users').doc(recId).update({
+      if (destinataire) {
+        const users = await db.collection('users').where('displayName', '==', destinataire).get();
+        if (!users.empty) {
+          await db.collection('users').doc(users.docs[0].id).update({
             balance: firebase.firestore.FieldValue.increment(montant)
           });
           await db.collection('virements').add({
-            to: cible,
+            to: destinataire,
             from: currentUser.displayName,
             amount: montant,
             seen: false
           });
-        } else {
-          return alert("Utilisateur introuvable");
         }
-      } else {
-        const orgName = prompt("Nom de l'organisation");
-        const orgs = await db.collection('organisations').where('name', '==', orgName).get();
-        if (!orgs.empty) {
-          const org = orgs.docs[0];
-          await org.ref.update({
-            balance: firebase.firestore.FieldValue.increment(montant),
-            lastAmount: montant,
-            lastFrom: currentUser.displayName
-          });
-        } else {
-          return alert("Organisation introuvable");
-        }
+      } else if (orgId) {
+        const orgRef = db.collection('organisations').doc(orgId);
+        await orgRef.update({
+          balance: firebase.firestore.FieldValue.increment(montant),
+          lastAmount: montant,
+          lastFrom: currentUser.displayName
+        });
       }
 
       await userRef.update({
         balance: firebase.firestore.FieldValue.increment(-montant)
       });
 
+      toggleModal(false);
       updateBalanceUI();
     };
   </script>
 </body>
 </html>
+
