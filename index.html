@@ -206,6 +206,34 @@
         });
       });
   }
+    
+function listenToOrganisationTransfers() {
+  db.collection("organisations")
+    .where("members", "array-contains", currentUser.displayName)
+    .onSnapshot((snapshot) => {
+      const orgIds = [];
+      snapshot.forEach((doc) => {
+        orgIds.push({ id: doc.id, name: doc.data().name });
+      });
+
+      if (orgIds.length === 0) return;
+
+      db.collection("org_transfers")
+        .where("orgId", "in", orgIds.map(o => o.id))
+        .where("seenBy", "not-in", [currentUser.displayName])
+        .onSnapshot((snap) => {
+          snap.forEach(async (doc) => {
+            const data = doc.data();
+            const orgName = orgIds.find(o => o.id === data.orgId)?.name || "une organisation";
+            showNotification(`${data.from} a fait un virement de ${data.amount.toFixed(2)}µ à l'organisation ${orgName}`);
+
+            await db.collection("org_transfers").doc(doc.id).update({
+              seenBy: firebase.firestore.FieldValue.arrayUnion(currentUser.displayName)
+            });
+          });
+        });
+    });
+}
 
   async function loadOrganisations() {
     orgList.innerHTML = "<h3>Organisations</h3>";
@@ -271,6 +299,8 @@
     loadOnlineUsers();
     listenToIncomingTransfers();
     setInterval(loadOnlineUsers, 10000);
+    listenToOrganisationTransfers();
+
   }
 
   loginBtn.onclick = async () => {
@@ -350,6 +380,14 @@
         lastAmount: montant,
         lastFrom: currentUser.displayName
       });
+      await db.collection('org_transfers').add({
+  orgId: orgId,
+  amount: montant,
+  from: currentUser.displayName,
+  timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+  seenBy: [] // sera rempli par les membres qui ont vu la notif
+});
+
     }
 
     await userRef.update({
