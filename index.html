@@ -12,7 +12,6 @@
       padding: 30px;
       text-align: center;
     }
-
     input, button, select {
       font-family: 'Press Start 2P', cursive;
       padding: 10px;
@@ -21,19 +20,16 @@
       outline: none;
       border-radius: 5px;
     }
-
     input, select {
       width: 80%;
       font-size: 10px;
     }
-
     button {
       background: #00ffaa;
       color: #000;
       cursor: pointer;
       font-size: 10px;
     }
-
     .popup, .modal {
       background: #222;
       border: 2px solid #00ffaa;
@@ -42,7 +38,6 @@
       margin: 20px auto;
       box-shadow: 0 0 10px #00ffaa;
     }
-
     .modal-overlay {
       position: fixed;
       top: 0; left: 0;
@@ -53,11 +48,9 @@
       align-items: center;
       z-index: 999;
     }
-
     .modal-overlay.active {
       display: flex;
     }
-
     .notification {
       position: fixed;
       bottom: 10px;
@@ -68,40 +61,36 @@
       display: none;
       font-size: 10px;
     }
-
-    .org-item {
+    #main {
+      max-width: 900px;
+      margin: auto;
+      display: flex;
+      justify-content: space-between;
+    }
+    #org-list, #online-users {
+      width: 30%;
+    }
+    #center-panel {
+      width: 35%;
+    }
+    #org-list > div, #online-users > div {
       margin-top: 15px;
       padding: 10px;
       background: #333;
       border: 2px solid #00ffaa;
       text-align: left;
     }
-
-    #main {
-      max-width: 900px;
-      margin: auto;
-      display: flex;
-      gap: 20px;
-    }
-
-    #main-content {
-      flex: 2;
-    }
-
-    #sidebar {
-      flex: 1;
-      background: #1a1a1a;
-      border: 2px solid #00ffaa;
-      padding: 10px;
-    }
-
     h1, h2, h3 {
       color: #00ffaa;
+    }
+    .org-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
   </style>
 </head>
 <body>
-  <!-- Auth -->
   <div id="auth-popup" class="popup">
     <h2>Connexion</h2>
     <input id="username" placeholder="Pseudo" /><br>
@@ -110,27 +99,24 @@
     <button id="signup-btn">Inscription</button>
   </div>
 
-  <!-- Main -->
   <div id="main" style="display:none;">
-    <div id="main-content">
+    <div id="org-list">
+      <h3>Organisations</h3>
+    </div>
+    <div id="center-panel">
       <h1>Bienvenue !</h1>
       <div id="balance">Balance: <span id="user-balance">00,00µ</span></div>
       <button id="new-org">Nouvelle organisation</button>
       <button id="virement">Virement</button>
-      <div id="org-list"></div>
     </div>
-
-    <div id="sidebar">
-      <h3>Utilisateurs en ligne</h3>
-      <div id="online-users"></div>
+    <div id="online-users">
+      <h3>En ligne</h3>
     </div>
   </div>
 
-  <!-- Notification -->
   <div id="notification" class="notification"></div>
   <audio id="chime" src="chime.mp3"></audio>
 
-  <!-- Virement Modal -->
   <div class="modal-overlay" id="virement-modal">
     <div class="modal">
       <h3>Faire un virement</h3>
@@ -138,13 +124,13 @@
       <input id="virement-destinataire" placeholder="Pseudo (ou vide)" />
       <select id="virement-organisation">
         <option value="">Aucune organisation</option>
-      </select><br><br>
+      </select>
+      <br><br>
       <button id="confirm-virement">Envoyer</button>
       <button onclick="toggleModal(false)">Annuler</button>
     </div>
   </div>
 
-  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
@@ -170,7 +156,7 @@
     const orgList = document.getElementById('org-list');
     const chime = document.getElementById('chime');
     const notif = document.getElementById('notification');
-    const onlineUsersDiv = document.getElementById('online-users');
+    const onlineUsers = document.getElementById('online-users');
 
     const modal = document.getElementById('virement-modal');
     const montantInput = document.getElementById('virement-montant');
@@ -183,19 +169,21 @@
         montantInput.value = "";
         destinataireInput.value = "";
         organisationSelect.innerHTML = `<option value="">Aucune organisation</option>`;
-        db.collection('organisations').get().then(snapshot => {
-          snapshot.forEach(doc => {
-            const opt = document.createElement("option");
-            opt.value = doc.id;
-            opt.textContent = doc.data().name;
-            organisationSelect.appendChild(opt);
+        db.collection('organisations')
+          .where('members', 'array-contains', currentUser.displayName)
+          .get().then(snapshot => {
+            snapshot.forEach(doc => {
+              const opt = document.createElement("option");
+              opt.value = doc.id;
+              opt.textContent = doc.data().name;
+              organisationSelect.appendChild(opt);
+            });
           });
-        });
       }
     }
 
     async function updateBalanceUI() {
-      const userRef = db.collection('users').doc(currentUser.uid);
+      const userRef = db.collection('users').doc(currentUser.displayName);
       const doc = await userRef.get();
       const balance = doc.exists ? doc.data().balance || 0 : 0;
       userBalance.textContent = balance.toFixed(2) + 'µ';
@@ -208,20 +196,66 @@
       setTimeout(() => notif.style.display = 'none', 5000);
     }
 
-    async function listenForVirements() {
-      db.collection('virements')
-        .where('to', '==', currentUser.displayName)
-        .where('seen', '==', false)
-        .onSnapshot(snapshot => {
-          snapshot.docChanges().forEach(async change => {
-            if (change.type === 'added') {
-              const data = change.doc.data();
-              showNotification(`${data.from} vous a fait un virement de ${data.amount.toFixed(2)}µ!`);
-              await db.collection('virements').doc(change.doc.id).update({ seen: true });
-              updateBalanceUI();
-            }
-          });
-        });
+    async function loadOrganisations() {
+      orgList.innerHTML = "<h3>Organisations</h3>";
+      const snap = await db.collection('organisations')
+        .where('members', 'array-contains', currentUser.displayName).get();
+
+      snap.forEach(doc => {
+        const data = doc.data();
+        const div = document.createElement("div");
+        div.innerHTML = `
+          <div class="org-header">
+            <div>
+              <strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ
+            </div>
+            <button onclick="recuperer('${doc.id}', ${data.balance})">Récupérer</button>
+          </div>
+        `;
+        orgList.appendChild(div);
+      });
+    }
+
+    window.recuperer = async (orgId, orgBalance) => {
+      const montant = parseFloat(prompt("Combien voulez-vous récupérer ?").replace(",", "."));
+      if (isNaN(montant) || montant <= 0 || montant > orgBalance) return alert("Montant invalide !");
+      await db.collection('organisations').doc(orgId).update({
+        balance: firebase.firestore.FieldValue.increment(-montant)
+      });
+      await db.collection('users').doc(currentUser.displayName).update({
+        balance: firebase.firestore.FieldValue.increment(montant)
+      });
+      updateBalanceUI();
+      loadOrganisations();
+    };
+
+    async function loadOnlineUsers() {
+      onlineUsers.innerHTML = "<h3>En ligne</h3>";
+      const snap = await db.collection('users').where('online', '==', true).get();
+      snap.forEach(doc => {
+        const div = document.createElement("div");
+        div.textContent = doc.id;
+        onlineUsers.appendChild(div);
+      });
+    }
+
+    async function setOnlineStatus(status) {
+      if (currentUser) {
+        await db.collection('users').doc(currentUser.displayName).set({
+          balance: 50,
+          online: status
+        }, { merge: true });
+      }
+    }
+
+    async function initApp() {
+      document.getElementById('auth-popup').style.display = 'none';
+      document.getElementById('main').style.display = 'flex';
+      await setOnlineStatus(true);
+      updateBalanceUI();
+      loadOrganisations();
+      loadOnlineUsers();
+      setInterval(loadOnlineUsers, 10000);
     }
 
     loginBtn.onclick = async () => {
@@ -229,8 +263,8 @@
         const email = usernameInput.value + "@mail.com";
         const pass = passwordInput.value;
         const userCred = await auth.signInWithEmailAndPassword(email, pass);
-        currentUser = userCred.user;
-        await db.collection('users').doc(currentUser.uid).update({ online: true });
+        currentUser = { displayName: usernameInput.value };
+        await setOnlineStatus(true);
         initApp();
       } catch {
         alert("Erreur de connexion !");
@@ -242,65 +276,16 @@
         const email = usernameInput.value + "@mail.com";
         const pass = passwordInput.value;
         const userCred = await auth.createUserWithEmailAndPassword(email, pass);
-        await userCred.user.updateProfile({ displayName: usernameInput.value });
-        await db.collection('users').doc(userCred.user.uid).set({ balance: 50, online: true });
-        currentUser = userCred.user;
+        currentUser = { displayName: usernameInput.value };
+        await db.collection('users').doc(usernameInput.value).set({
+          balance: 50,
+          online: true
+        });
         initApp();
       } catch {
         alert("Erreur d'inscription !");
       }
     };
-
-    async function loadOrganisations() {
-      orgList.innerHTML = "";
-      const snap = await db.collection('organisations').get();
-      snap.forEach(doc => {
-        const data = doc.data();
-        const div = document.createElement("div");
-        div.className = "org-item";
-        div.innerHTML = `<strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ<br>`;
-        const btn = document.createElement("button");
-        btn.textContent = "Récupérer";
-        btn.onclick = async () => {
-          const montant = prompt("Montant à récupérer ?");
-          const m = parseFloat(montant.replace(",", "."));
-          if (isNaN(m) || m <= 0) return;
-          if (data.balance < m) return alert("Pas assez de fonds dans l'organisation.");
-          await db.collection('organisations').doc(doc.id).update({
-            balance: firebase.firestore.FieldValue.increment(-m)
-          });
-          await db.collection('users').doc(currentUser.uid).update({
-            balance: firebase.firestore.FieldValue.increment(m)
-          });
-          updateBalanceUI();
-          loadOrganisations();
-        };
-        div.appendChild(btn);
-        orgList.appendChild(div);
-      });
-    }
-
-    function loadOnlineUsers() {
-      db.collection('users').where("online", "==", true)
-        .onSnapshot(snap => {
-          onlineUsersDiv.innerHTML = "";
-          snap.forEach(doc => {
-            const data = doc.data();
-            const div = document.createElement("div");
-            div.textContent = doc.id + " (" + (data.displayName || "??") + ")";
-            onlineUsersDiv.appendChild(div);
-          });
-        });
-    }
-
-    function initApp() {
-      document.getElementById('auth-popup').style.display = 'none';
-      document.getElementById('main').style.display = 'flex';
-      updateBalanceUI();
-      loadOrganisations();
-      loadOnlineUsers();
-      listenForVirements();
-    }
 
     document.getElementById('new-org').onclick = async () => {
       const name = prompt("Nom de l'organisation");
@@ -322,18 +307,18 @@
       const montant = parseFloat(montantInput.value.replace(",", "."));
       const destinataire = destinataireInput.value.trim();
       const orgId = organisationSelect.value;
-
       if (isNaN(montant) || montant <= 0) return;
 
-      const userRef = db.collection('users').doc(currentUser.uid);
+      const userRef = db.collection('users').doc(currentUser.displayName);
       const userSnap = await userRef.get();
       const solde = userSnap.data().balance || 0;
       if (solde < montant) return alert("Pas assez d'argent !");
 
       if (destinataire) {
-        const users = await db.collection('users').where('displayName', '==', destinataire).get();
-        if (!users.empty) {
-          await db.collection('users').doc(users.docs[0].id).update({
+        const destRef = db.collection('users').doc(destinataire);
+        const destSnap = await destRef.get();
+        if (destSnap.exists) {
+          await destRef.update({
             balance: firebase.firestore.FieldValue.increment(montant)
           });
           await db.collection('virements').add({
@@ -358,13 +343,11 @@
 
       toggleModal(false);
       updateBalanceUI();
+      loadOrganisations();
     };
 
-    window.addEventListener('beforeunload', () => {
-      if (currentUser) {
-        db.collection('users').doc(currentUser.uid).update({ online: false });
-      }
-    });
+    window.addEventListener("beforeunload", () => setOnlineStatus(false));
   </script>
 </body>
 </html>
+
