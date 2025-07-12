@@ -86,32 +86,6 @@
     h1, h2, h3 {
       color: #00ffaa;
     }
-#orgs, #onlineUsers {
-  width: 20%;
-  background: #1e1e1e;
-  padding: 10px;
-  overflow-y: auto;
-}
-
-#orgs {
-  order: -1;
-}
-
-#main {
-  flex: 1;
-  padding: 20px;
-  text-align: center;
-  position: relative;
-}
-
-body {
-  display: flex;
-  height: 100vh;
-  margin: 0;
-  background: #121212;
-  color: white;
-  font-family: 'Press Start 2P', cursive;
-}
 
   </style>
 </head>
@@ -124,18 +98,6 @@ body {
     <button id="login-btn">Connexion</button>
     <button id="signup-btn">Inscription</button>
   </div>
-<div id="orgs">
-  <h3>Organisations</h3>
-  <ul id="orgList"></ul>
-</div>
-<div id="orgs">
-  <h3>Organisations</h3>
-  <ul id="orgList"></ul>
-</div>
-<div id="onlineUsers">
-  <h3>En ligne</h3>
-  <ul id="userList"></ul>
-</div>
 
   <!-- Main -->
   <div id="main" style="display:none;">
@@ -169,236 +131,210 @@ body {
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
-<script>
- const firebaseConfig = {
-  apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
-  authDomain: "kykychat-24c7f.firebaseapp.com",
-  databaseURL: "https://kykychat-24c7f-default-rtdb.firebaseio.com",
-  projectId: "kykychat-24c7f",
-  storageBucket: "kykychat-24c7f.firebaseapp.com",
-  messagingSenderId: "342562811927",
-  appId: "1:342562811927:web:0fed1e1f511c4fddcfec52"
-};
 
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-const rtdb = firebase.database();
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
+      authDomain: "kykychat-24c7f.firebaseapp.com",
+      databaseURL: "https://kykychat-24c7f-default-rtdb.firebaseio.com",
+      projectId: "kykychat-24c7f",
+      storageBucket: "kykychat-24c7f.firebasestorage.app",
+      messagingSenderId: "342562811927",
+      appId: "1:342562811927:web:0fed1e1f511c4fddcfec52"
+    };
 
-let currentUser = null;
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
-const loginBtn = document.getElementById('login-btn');
-const signupBtn = document.getElementById('signup-btn');
-const usernameInput = document.getElementById('username');
-const passwordInput = document.getElementById('password');
-const userBalance = document.getElementById('user-balance');
-const orgList = document.getElementById('org-list');
-const chime = document.getElementById('chime');
-const notif = document.getElementById('notification');
-const onlineList = document.getElementById('online-users');
+    let currentUser = null;
 
-const modal = document.getElementById('virement-modal');
-const montantInput = document.getElementById('virement-montant');
-const destinataireInput = document.getElementById('virement-destinataire');
-const organisationSelect = document.getElementById('virement-organisation');
+    const loginBtn = document.getElementById('login-btn');
+    const signupBtn = document.getElementById('signup-btn');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const userBalance = document.getElementById('user-balance');
+    const orgList = document.getElementById('org-list');
+    const chime = document.getElementById('chime');
+    const notif = document.getElementById('notification');
 
-function toggleModal(show = true) {
-  modal.classList.toggle("active", show);
-  if (show) {
-    montantInput.value = "";
-    destinataireInput.value = "";
-    organisationSelect.innerHTML = `<option value="">Aucune organisation</option>`;
-    db.collection('organisations').get().then(snapshot => {
-      snapshot.forEach(doc => {
-        const opt = document.createElement("option");
-        opt.value = doc.id;
-        opt.textContent = doc.data().name;
-        organisationSelect.appendChild(opt);
-      });
-    });
-  }
-}
+    const modal = document.getElementById('virement-modal');
+    const montantInput = document.getElementById('virement-montant');
+    const destinataireInput = document.getElementById('virement-destinataire');
+    const organisationSelect = document.getElementById('virement-organisation');
 
-async function updateBalanceUI() {
-  const userRef = db.collection('users').doc(currentUser.uid);
-  const doc = await userRef.get();
-  const balance = doc.exists ? doc.data().balance || 0 : 0;
-  userBalance.textContent = balance.toFixed(2) + 'µ';
-}
-
-function showNotification(msg) {
-  notif.textContent = msg;
-  notif.style.display = 'block';
-  chime.play();
-  setTimeout(() => notif.style.display = 'none', 5000);
-}
-
-async function listenForVirements() {
-  db.collection('virements')
-    .where('to', '==', currentUser.displayName)
-    .where('seen', '==', false)
-    .onSnapshot(snapshot => {
-      snapshot.docChanges().forEach(async change => {
-        if (change.type === 'added') {
-          const data = change.doc.data();
-          showNotification(`${data.from} vous a fait un virement de ${data.amount.toFixed(2)}µ!`);
-          await db.collection('virements').doc(change.doc.id).update({ seen: true });
-          updateBalanceUI();
-        }
-      });
-    });
-
-  db.collection('organisations')
-    .where('members', 'array-contains', currentUser.displayName)
-    .onSnapshot(snapshot => {
-      snapshot.docChanges().forEach(change => {
-        if (change.type === 'modified') {
-          const data = change.doc.data();
-          if (data.lastAmount > 0) {
-            showNotification(`${data.lastFrom} a fait un virement de ${data.lastAmount.toFixed(2)}µ à l'organisation ${data.name}`);
-          }
-        }
-      });
-    });
-}
-
-loginBtn.onclick = async () => {
-  try {
-    const email = usernameInput.value + "@mail.com";
-    const pass = passwordInput.value;
-    const userCred = await auth.signInWithEmailAndPassword(email, pass);
-    currentUser = userCred.user;
-    initApp();
-  } catch {
-    showNotification("Erreur de connexion !");
-  }
-};
-
-signupBtn.onclick = async () => {
-  try {
-    const email = usernameInput.value + "@mail.com";
-    const pass = passwordInput.value;
-    const userCred = await auth.createUserWithEmailAndPassword(email, pass);
-    await userCred.user.updateProfile({ displayName: usernameInput.value });
-    await db.collection('users').doc(userCred.user.uid).set({ balance: 50 });
-    currentUser = userCred.user;
-    initApp();
-  } catch {
-    showNotification("Erreur d'inscription !");
-  }
-};
-
-function initApp() {
-  document.getElementById('auth-popup').style.display = 'none';
-  document.getElementById('main').style.display = 'block';
-  updateBalanceUI();
-  loadOrganisations();
-  listenForVirements();
-  setOnlineStatus();
-  listenOnlineUsers();
-}
-
-function setOnlineStatus() {
-  const ref = rtdb.ref('online/' + currentUser.displayName);
-  ref.set(true);
-  ref.onDisconnect().remove();
-}
-
-function listenOnlineUsers() {
-  rtdb.ref('online').on('value', snapshot => {
-    const users = snapshot.val() || {};
-    onlineList.innerHTML = "";
-    Object.keys(users).forEach(name => {
-      const div = document.createElement("div");
-      div.textContent = name;
-      onlineList.appendChild(div);
-    });
-  });
-}
-
-document.getElementById('new-org').onclick = async () => {
-  const name = prompt("Nom de l'organisation");
-  if (!name) return;
-  await db.collection('organisations').add({
-    name,
-    creator: currentUser.displayName,
-    balance: 0,
-    members: [currentUser.displayName],
-    lastAmount: 0,
-    lastFrom: ""
-  });
-  loadOrganisations();
-};
-
-async function loadOrganisations() {
-  orgList.innerHTML = "";
-  const snap = await db.collection('organisations')
-    .where('members', 'array-contains', currentUser.displayName).get();
-
-  snap.forEach(doc => {
-    const data = doc.data();
-    const div = document.createElement("div");
-    div.innerHTML = `<strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ`;
-    div.onclick = () => {
-      const newUser = prompt("Ajouter un utilisateur à cette organisation:");
-      if (newUser) {
-        db.collection('organisations').doc(doc.id).update({
-          members: firebase.firestore.FieldValue.arrayUnion(newUser)
+    function toggleModal(show = true) {
+      modal.classList.toggle("active", show);
+      if (show) {
+        montantInput.value = "";
+        destinataireInput.value = "";
+        organisationSelect.innerHTML = `<option value="">Aucune organisation</option>`;
+        db.collection('organisations').get().then(snapshot => {
+          snapshot.forEach(doc => {
+            const opt = document.createElement("option");
+            opt.value = doc.id;
+            opt.textContent = doc.data().name;
+            organisationSelect.appendChild(opt);
+          });
         });
       }
+    }
+
+    async function updateBalanceUI() {
+      const userRef = db.collection('users').doc(currentUser.uid);
+      const doc = await userRef.get();
+      const balance = doc.exists ? doc.data().balance || 0 : 0;
+      userBalance.textContent = balance.toFixed(2) + 'µ';
+    }
+
+    function showNotification(msg) {
+      notif.textContent = msg;
+      notif.style.display = 'block';
+      chime.play();
+      setTimeout(() => notif.style.display = 'none', 5000);
+    }
+
+    async function listenForVirements() {
+      db.collection('virements')
+        .where('to', '==', currentUser.displayName)
+        .where('seen', '==', false)
+        .onSnapshot(snapshot => {
+          snapshot.docChanges().forEach(async change => {
+            if (change.type === 'added') {
+              const data = change.doc.data();
+              showNotification(`${data.from} vous a fait un virement de ${data.amount.toFixed(2)}µ!`);
+              await db.collection('virements').doc(change.doc.id).update({ seen: true });
+              updateBalanceUI();
+            }
+          });
+        });
+
+      db.collection('organisations')
+        .where('members', 'array-contains', currentUser.displayName)
+        .onSnapshot(snapshot => {
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'modified') {
+              const data = change.doc.data();
+              if (data.lastAmount > 0) {
+                showNotification(`${data.lastFrom} a fait un virement de ${data.lastAmount.toFixed(2)}µ à l'organisation ${data.name}`);
+              }
+            }
+          });
+        });
+    }
+
+    loginBtn.onclick = async () => {
+      try {
+        const email = usernameInput.value + "@mail.com";
+        const pass = passwordInput.value;
+        const userCred = await auth.signInWithEmailAndPassword(email, pass);
+        currentUser = userCred.user;
+        initApp();
+      } catch {
+        alert("Erreur de connexion !");
+      }
     };
-    orgList.appendChild(div);
-  });
-}
 
-document.getElementById('virement').onclick = () => toggleModal(true);
+    signupBtn.onclick = async () => {
+      try {
+        const email = usernameInput.value + "@mail.com";
+        const pass = passwordInput.value;
+        const userCred = await auth.createUserWithEmailAndPassword(email, pass);
+        await userCred.user.updateProfile({ displayName: usernameInput.value });
+        await db.collection('users').doc(userCred.user.uid).set({ balance: 50 });
+        currentUser = userCred.user;
+        initApp();
+      } catch {
+        alert("Erreur d'inscription !");
+      }
+    };
 
-document.getElementById('confirm-virement').onclick = async () => {
-  const montant = parseFloat(montantInput.value.replace(",", "."));
-  const destinataire = destinataireInput.value.trim();
-  const orgId = organisationSelect.value;
+    function initApp() {
+      document.getElementById('auth-popup').style.display = 'none';
+      document.getElementById('main').style.display = 'block';
+      updateBalanceUI();
+      loadOrganisations();
+      listenForVirements();
+    }
 
-  if (isNaN(montant) || montant <= 0) return;
-
-  const userRef = db.collection('users').doc(currentUser.uid);
-  const userSnap = await userRef.get();
-  const solde = userSnap.data().balance || 0;
-  if (solde < montant) {
-    showNotification("Pas assez d'argent !");
-    return;
-  }
-
-  if (destinataire) {
-    const users = await db.collection('users').where('displayName', '==', destinataire).get();
-    if (!users.empty) {
-      await db.collection('users').doc(users.docs[0].id).update({
-        balance: firebase.firestore.FieldValue.increment(montant)
+    document.getElementById('new-org').onclick = async () => {
+      const name = prompt("Nom de l'organisation");
+      if (!name) return;
+      await db.collection('organisations').add({
+        name,
+        creator: currentUser.displayName,
+        balance: 0,
+        members: [currentUser.displayName],
+        lastAmount: 0,
+        lastFrom: ""
       });
-      await db.collection('virements').add({
-        to: destinataire,
-        from: currentUser.displayName,
-        amount: montant,
-        seen: false
+      loadOrganisations();
+    };
+
+    async function loadOrganisations() {
+      orgList.innerHTML = "";
+      const snap = await db.collection('organisations')
+        .where('members', 'array-contains', currentUser.displayName).get();
+
+      snap.forEach(doc => {
+        const data = doc.data();
+        const div = document.createElement("div");
+        div.innerHTML = `<strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ`;
+        div.onclick = () => {
+          const newUser = prompt("Ajouter un utilisateur à cette organisation:");
+          if (newUser) {
+            db.collection('organisations').doc(doc.id).update({
+              members: firebase.firestore.FieldValue.arrayUnion(newUser)
+            });
+          }
+        };
+        orgList.appendChild(div);
       });
     }
-  } else if (orgId) {
-    const orgRef = db.collection('organisations').doc(orgId);
-    await orgRef.update({
-      balance: firebase.firestore.FieldValue.increment(montant),
-      lastAmount: montant,
-      lastFrom: currentUser.displayName
-    });
-  }
 
-  await userRef.update({
-    balance: firebase.firestore.FieldValue.increment(-montant)
-  });
+    document.getElementById('virement').onclick = () => toggleModal(true);
 
-  toggleModal(false);
-  updateBalanceUI();
-};
+    document.getElementById('confirm-virement').onclick = async () => {
+      const montant = parseFloat(montantInput.value.replace(",", "."));
+      const destinataire = destinataireInput.value.trim();
+      const orgId = organisationSelect.value;
 
+      if (isNaN(montant) || montant <= 0) return;
+
+      const userRef = db.collection('users').doc(currentUser.uid);
+      const userSnap = await userRef.get();
+      const solde = userSnap.data().balance || 0;
+      if (solde < montant) return alert("Pas assez d'argent !");
+
+      if (destinataire) {
+        const users = await db.collection('users').where('displayName', '==', destinataire).get();
+        if (!users.empty) {
+          await db.collection('users').doc(users.docs[0].id).update({
+            balance: firebase.firestore.FieldValue.increment(montant)
+          });
+          await db.collection('virements').add({
+            to: destinataire,
+            from: currentUser.displayName,
+            amount: montant,
+            seen: false
+          });
+        }
+      } else if (orgId) {
+        const orgRef = db.collection('organisations').doc(orgId);
+        await orgRef.update({
+          balance: firebase.firestore.FieldValue.increment(montant),
+          lastAmount: montant,
+          lastFrom: currentUser.displayName
+        });
+      }
+
+      await userRef.update({
+        balance: firebase.firestore.FieldValue.increment(-montant)
+      });
+
+      toggleModal(false);
+      updateBalanceUI();
+    };
   </script>
 </body>
 </html>
-
