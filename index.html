@@ -494,29 +494,79 @@ document.getElementById('new-org').onclick = async () => {
 document.getElementById('virement').onclick = () => toggleModal(true);
 
 document.getElementById('confirm-virement').onclick = async () => {
-  const montant = parseFloat(montantInput.value.replace(",", "."));
-  const destinataire = destinataireInput.value.trim();
-  const orgId = organisationSelect.value;
-  if (isNaN(montant) || montant <= 0) return;
+  try {
+    const montant = parseFloat(montantInput.value.replace(",", "."));
+    const destinataire = destinataireInput.value.trim();
+    const orgId = organisationSelect.value;
 
-  const userRef = db.collection('users').doc(currentUser.displayName);
-  const userSnap = await userRef.get();
-  const solde = userSnap.data().balance || 0;
-  if (solde < montant) return alert("Pas assez d'argent !");
+    if (isNaN(montant) || montant <= 0) return alert("Montant invalide !");
+    if (!currentUser) return alert("Utilisateur non connecté.");
 
-  if (destinataire) {
-  const destRef = db.collection('users').doc(destinataire);
-  const destSnap = await destRef.get();
-  if (destSnap.exists) {
-    await destRef.update({
-      balance: firebase.firestore.FieldValue.increment(montant)
+    const userRef = db.collection('users').doc(currentUser.displayName);
+    const userSnap = await userRef.get();
+    const solde = userSnap.data().balance || 0;
+    if (solde < montant) return alert("Pas assez d'argent !");
+
+    if (destinataire) {
+      const destRef = db.collection('users').doc(destinataire);
+      const destSnap = await destRef.get();
+      if (destSnap.exists) {
+        await destRef.update({
+          balance: firebase.firestore.FieldValue.increment(montant)
+        });
+        await db.collection('virements').add({
+          to: destinataire,
+          from: currentUser.displayName,
+          amount: montant,
+          seen: false
+        });
+
+        await db.collection('logs').add({
+          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à ${destinataire}`
+        });
+      } else {
+        return alert("Destinataire introuvable !");
+      }
+    } else if (orgId) {
+      const orgRef = db.collection('organisations').doc(orgId);
+      const orgSnap = await orgRef.get();
+      const orgName = orgSnap.exists ? orgSnap.data().name : "une organisation";
+
+      await orgRef.update({
+        balance: firebase.firestore.FieldValue.increment(montant),
+        lastAmount: montant,
+        lastFrom: currentUser.displayName
+      });
+
+      await db.collection('org_transfers').add({
+        orgId: orgId,
+        amount: montant,
+        from: currentUser.displayName,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        seenBy: []
+      });
+
+      await db.collection('logs').add({
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à l'organisation ${orgName}`
+      });
+    } else {
+      return alert("Veuillez saisir un destinataire ou choisir une organisation.");
+    }
+
+    await userRef.update({
+      balance: firebase.firestore.FieldValue.increment(-montant)
     });
-    await db.collection('virements').add({
-      to: destinataire,
-      from: currentUser.displayName,
-      amount: montant,
-      seen: false
-    });
+
+    toggleModal(false);
+    updateBalanceUI();
+    loadOrganisations();
+  } catch (err) {
+    console.error("Erreur lors du virement :", err);
+    alert("Une erreur est survenue lors du virement.");
+  }
+};
 
     // 🔹 Ajout du log personnel
     await db.collection('logs').add({
