@@ -92,10 +92,11 @@
   const auth = getAuth(app);
   const allowedAdmins = ["canari851", "kykygosed", "Kenzou_TV"];
 
-  function showSection(id) {
-    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-  }
+window.showSection = function(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
 
   async function loadUsers() {
     const container = document.getElementById('users');
