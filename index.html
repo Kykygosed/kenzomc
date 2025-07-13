@@ -293,20 +293,23 @@ function listenToOrganisationTransfers() {
   db.collection("organisations")
     .where("members", "array-contains", currentUser.displayName)
     .onSnapshot((snapshot) => {
-      const orgIds = [];
+      const orgMap = {};
       snapshot.forEach((doc) => {
-        orgIds.push({ id: doc.id, name: doc.data().name });
+        orgMap[doc.id] = doc.data().name;
       });
 
-      if (orgIds.length === 0) return;
+      if (Object.keys(orgMap).length === 0) return;
 
       db.collection("org_transfers")
-        .where("orgId", "in", orgIds.map(o => o.id))
-        .where("seenBy", "not-in", [currentUser.displayName])
+        .where("orgId", "in", Object.keys(orgMap))
+        .orderBy("timestamp", "desc") // pour trier les plus récents
+        .limit(10) // limite pour éviter surcharge
         .onSnapshot((snap) => {
           snap.forEach(async (doc) => {
             const data = doc.data();
-            const orgName = orgIds.find(o => o.id === data.orgId)?.name || "une organisation";
+            if ((data.seenBy || []).includes(currentUser.displayName)) return;
+
+            const orgName = orgMap[data.orgId] || "une organisation";
             showNotification(`${data.from} a fait un virement de ${data.amount.toFixed(2)}µ à l'organisation ${orgName}`);
 
             await db.collection("org_transfers").doc(doc.id).update({
@@ -316,6 +319,7 @@ function listenToOrganisationTransfers() {
         });
     });
 }
+
 
 async function loadOrganisations() {
   orgList.innerHTML = "<h3>Organisations</h3>";
