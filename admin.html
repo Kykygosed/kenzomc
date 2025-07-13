@@ -76,80 +76,90 @@
 
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-  import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
-  import { getDatabase, ref, get, set, update, remove, onValue, push, orderByChild, limitToLast, query } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+import {
+  getDatabase, ref, get, set, update, remove,
+  onValue, push, orderByChild, limitToLast, query
+} from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
-    authDomain: "kykychat-24c7f.firebaseapp.com",
-    databaseURL: "https://kykychat-24c7f-default-rtdb.firebaseio.com",
-    projectId: "kykychat-24c7f"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
+  authDomain: "kykychat-24c7f.firebaseapp.com",
+  databaseURL: "https://kykychat-24c7f-default-rtdb.firebaseio.com",
+  projectId: "kykychat-24c7f"
+};
 
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const auth = getAuth(app);
-  const allowedAdmins = ["canari851", "kykygosed", "Kenzou_TV"];
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+const allowedAdmins = ["canari851", "kykygosed", "Kenzou_TV"];
 
-window.showSection = function(id) {
+window.showSection = function (id) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
 
-
-  async function loadUsers() {
-    const container = document.getElementById('users');
+async function loadUsers() {
+  const container = document.getElementById('users');
+  container.innerHTML = '<h2>Utilisateurs</h2>';
+  const usersRef = ref(db, "users");
+  onValue(usersRef, (snapshot) => {
     container.innerHTML = '<h2>Utilisateurs</h2>';
-    const usersRef = ref(db, "users");
-    onValue(usersRef, (snapshot) => {
-      container.innerHTML = '<h2>Utilisateurs</h2>';
-      snapshot.forEach(child => {
-        const data = child.val();
-        const div = document.createElement('div');
-        div.className = 'user-entry';
-        div.innerHTML = `
-          <span>${child.key}</span><br>
-          <span>Balance: <span id="bal-${child.key}">${(data.balance || 0).toFixed(2)}µ</span></span><br>
-          <button class="action-btn" onclick="setBalance('${child.key}')">Modifier</button>
-          <button class="action-btn" onclick="deleteUser('${child.key}')">Supprimer</button>
-        `;
-        container.appendChild(div);
-      });
+    snapshot.forEach(child => {
+      const data = child.val();
+      const div = document.createElement('div');
+      div.className = 'user-entry';
+      div.innerHTML = `
+        <span>${child.key}</span><br>
+        <span>Balance: <span id="bal-${child.key}">${(data.balance || 0).toFixed(2)}µ</span></span><br>
+        <button class="action-btn" onclick="setBalance('${child.key}')">Modifier</button>
+        <button class="action-btn" onclick="deleteUser('${child.key}')">Supprimer</button>
+      `;
+      container.appendChild(div);
     });
-  }
+  });
+}
 
-  async function loadOrganisations() {
-    const container = document.getElementById('orgs');
+async function loadOrganisations() {
+  const container = document.getElementById('orgs');
+  container.innerHTML = '<h2>Organisations</h2>';
+  const orgsRef = ref(db, "organisations");
+  onValue(orgsRef, (snapshot) => {
     container.innerHTML = '<h2>Organisations</h2>';
-    const orgsRef = ref(db, "organisations");
-    onValue(orgsRef, (snapshot) => {
-      container.innerHTML = '<h2>Organisations</h2>';
-      snapshot.forEach(child => {
-        const data = child.val();
-        const membersHTML = (data.members || []).map(m => `<span>${m} <button onclick="removeMember('${child.key}','${m}')">✕</button></span>`).join(' ');
-        const div = document.createElement('div');
-        div.className = 'org-entry';
-        div.innerHTML = `
-          <strong>${data.name}</strong> (Balance: ${(data.balance || 0).toFixed(2)}µ)
-          <br><button class="action-btn" onclick="deleteOrg('${child.key}')">Supprimer</button>
-          <button class="action-btn" onclick="modifyOrgBalance('${child.key}')">Modifier balance</button>
-          <br><strong>Membres :</strong><div class="member-list">${membersHTML}</div>
-          <input type="text" id="add-${child.key}" placeholder="@pseudo" style="width: 140px;" />
-          <button class="action-btn" onclick="addMember('${child.key}')">Ajouter membre</button>
-        `;
-        container.appendChild(div);
-      });
+    snapshot.forEach(child => {
+      const data = child.val();
+      const membersHTML = (data.members || []).map(m => `<span>${m} <button onclick="removeMember('${child.key}','${m}')">✕</button></span>`).join(' ');
+      const div = document.createElement('div');
+      div.className = 'org-entry';
+      div.innerHTML = `
+        <strong>${data.name}</strong> (Balance: ${(data.balance || 0).toFixed(2)}µ)
+        <br><button class="action-btn" onclick="deleteOrg('${child.key}')">Supprimer</button>
+        <button class="action-btn" onclick="modifyOrgBalance('${child.key}')">Modifier balance</button>
+        <br><strong>Membres :</strong><div class="member-list">${membersHTML}</div>
+        <input type="text" id="add-${child.key}" placeholder="@pseudo" style="width: 140px;" />
+        <button class="action-btn" onclick="addMember('${child.key}')">Ajouter membre</button>
+      `;
+      container.appendChild(div);
     });
-  }
+  });
+}
 
 async function loadLogs() {
   const container = document.getElementById('logs');
   container.innerHTML = '<h2>Logs</h2>';
-
   const logs = [];
 
-  // Récupérer les virements classiques
+  // Précharger les noms d'organisations
+  const orgNameMap = {};
+  const orgSnap = await get(ref(db, 'organisations'));
+  if (orgSnap.exists()) {
+    orgSnap.forEach(child => {
+      orgNameMap[child.key] = child.val().name || child.key;
+    });
+  }
+
+  // Virements classiques
   const virementsSnap = await get(query(ref(db, 'virements'), limitToLast(50)));
   if (virementsSnap.exists()) {
     virementsSnap.forEach(child => {
@@ -162,18 +172,19 @@ async function loadLogs() {
     });
   }
 
-  // Récupérer les transferts vers les organisations
+  // Virements vers organisations
   const orgsSnap = await get(ref(db, 'org_transfers'));
   if (orgsSnap.exists()) {
     const orgsData = orgsSnap.val();
     for (const orgId in orgsData) {
       const transfers = orgsData[orgId];
+      const orgName = orgNameMap[orgId] || orgId;
       for (const key in transfers) {
         const transfer = transfers[key];
         if (!transfer.from || !transfer.amount) continue;
         logs.push({
           timestamp: transfer.timestamp || 0,
-          text: `[🏢] ${transfer.from} → Organisation ${orgId} : ${transfer.amount.toFixed(2)}µ`
+          text: `[🏢] ${transfer.from} → Organisation ${orgName} : ${transfer.amount.toFixed(2)}µ`
         });
       }
     }
@@ -189,43 +200,46 @@ async function loadLogs() {
   });
 }
 
+// Actions
+window.setBalance = async function (userId) {
+  const val = prompt("Nouvelle balance ? (en µ)");
+  const n = parseFloat(val);
+  if (isNaN(n)) return;
+  await update(ref(db, "users/" + userId), { balance: n });
+  document.getElementById("bal-" + userId).textContent = n.toFixed(2) + "µ";
+};
 
+window.deleteUser = async function (userId) {
+  if (confirm("Supprimer cet utilisateur ?")) {
+    await remove(ref(db, "users/" + userId));
+  }
+};
 
-  // Action functions
-  window.setBalance = async function (userId) {
-    const val = prompt("Nouvelle balance ? (en µ)");
-    const n = parseFloat(val);
-    if (isNaN(n)) return;
-    await update(ref(db, "users/" + userId), { balance: n });
-    document.getElementById("bal-" + userId).textContent = n.toFixed(2) + "µ";
-  };
+window.deleteOrg = async function (orgId) {
+  if (confirm("Supprimer cette organisation ?")) {
+    await remove(ref(db, "organisations/" + orgId));
+  }
+};
 
-  window.deleteUser = async function (userId) {
-    if (confirm("Supprimer cet utilisateur ?")) {
-      await remove(ref(db, "users/" + userId));
-    }
-  };
-
-  window.deleteOrg = async function (orgId) {
-    if (confirm("Supprimer cette organisation ?")) {
-      await remove(ref(db, "organisations/" + orgId));
-    }
-  };
-
-  window.modifyOrgBalance = async function (orgId) {
-    const val = prompt("Nouvelle balance ? (en µ)");
-    const n = parseFloat(val);
-    if (isNaN(n)) return;
-    await update(ref(db, "organisations/" + orgId), { balance: n });
-  };
+window.modifyOrgBalance = async function (orgId) {
+  const val = prompt("Nouvelle balance ? (en µ)");
+  const n = parseFloat(val);
+  if (isNaN(n)) return;
+  await update(ref(db, "organisations/" + orgId), { balance: n });
+};
 
 window.addMember = async function (orgId) {
   const input = document.getElementById("add-" + orgId);
   const pseudo = input.value.trim();
   if (!pseudo) return;
 
-  const memberRef = ref(db, "organisations/" + orgId + "/members/" + pseudo);
-  await set(memberRef, true);
+  const memberRef = ref(db, `organisations/${orgId}/members`);
+  const snap = await get(memberRef);
+  const members = snap.exists() ? snap.val() : [];
+  if (!members.includes(pseudo)) {
+    members.push(pseudo);
+    await update(ref(db, "organisations/" + orgId), { members });
+  }
 
   const currentUser = auth.currentUser;
   const pseudoAdmin = currentUser.displayName;
@@ -234,36 +248,36 @@ window.addMember = async function (orgId) {
     timestamp: Date.now()
   });
 
-  input.value = ""; // reset input
+  input.value = "";
 };
 
+window.removeMember = async function (orgId, pseudo) {
+  const membersRef = ref(db, "organisations/" + orgId + "/members");
+  const snapshot = await get(membersRef);
+  if (!snapshot.exists()) return;
 
-  window.removeMember = async function (orgId, pseudo) {
-    const membersRef = ref(db, "organisations/" + orgId + "/members");
-    const snapshot = await get(membersRef);
-    if (!snapshot.exists()) return;
+  const members = snapshot.val().filter(m => m !== pseudo);
+  await update(ref(db, "organisations/" + orgId), { members });
+};
 
-    const members = snapshot.val().filter(m => m !== pseudo);
-    await update(ref(db, "organisations/" + orgId), { members });
-  };
+// Auth
+onAuthStateChanged(auth, user => {
+  if (!user) return location.href = "/index.html";
+  const pseudo = user.displayName;
+  if (!allowedAdmins.includes(pseudo)) {
+    document.body.innerHTML = `<div style="color:white;text-align:center;padding:50px;">
+      <h1>Accès refusé</h1>
+      <p>Désolé ${pseudo}, tu n'es pas autorisé à accéder à cette page.</p>
+    </div>`;
+    return;
+  }
 
-  // Auth
-  onAuthStateChanged(auth, user => {
-    if (!user) return location.href = "/index.html";
-    const pseudo = user.displayName;
-    if (!allowedAdmins.includes(pseudo)) {
-      document.body.innerHTML = `<div style="color:white;text-align:center;padding:50px;">
-        <h1>Accès refusé</h1>
-        <p>Désolé ${pseudo}, tu n'es pas autorisé à accéder à cette page.</p>
-      </div>`;
-      return;
-    }
+  showSection('users');
+  loadUsers();
+  loadOrganisations();
+  loadLogs();
+});
 
-    showSection('users');
-    loadUsers();
-    loadOrganisations();
-    loadLogs();
-  });
 </script>
 
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
