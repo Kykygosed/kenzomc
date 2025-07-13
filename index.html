@@ -88,6 +88,33 @@
       justify-content: space-between;
       align-items: center;
     }
+    .organisation-box {
+  border: 2px solid #000;
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 15px;
+  background-color: #f0f0f0;
+  font-family: 'Press Start 2P', sans-serif;
+  font-size: 12px;
+}
+
+.org-content {
+  margin-bottom: 10px;
+}
+
+.org-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.org-buttons button {
+  font-family: 'Press Start 2P', sans-serif;
+  font-size: 10px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
   </style>
 </head>
 <body>
@@ -243,12 +270,15 @@ async function loadOrganisations() {
   snap.forEach(doc => {
     const data = doc.data();
     const div = document.createElement("div");
+    div.classList.add("organisation-box");
 
     const html = `
-      <div class="org-header">
-        <div>
-          <strong>${data.name}</strong><br>Créé par: ${data.creator}<br>Balance: ${data.balance.toFixed(2)}µ
-        </div>
+      <div class="org-content">
+        <strong>${data.name}</strong><br>
+        Créé par: ${data.creator}<br>
+        Balance: ${data.balance.toFixed(2)}µ
+      </div>
+      <div class="org-buttons">
         <button class="recuperer-btn" data-orgid="${doc.id}" data-balance="${data.balance}">Récupérer</button>
         <button class="ajouter-btn" data-orgid="${doc.id}">Ajouter membre</button>
       </div>
@@ -257,6 +287,8 @@ async function loadOrganisations() {
     div.innerHTML = html;
     orgList.appendChild(div);
   });
+}
+
 
   // Ajout des listeners après génération
   document.querySelectorAll(".recuperer-btn").forEach(btn => {
