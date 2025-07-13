@@ -268,6 +268,15 @@ async function updateBalanceUI() {
   const balance = doc.exists ? doc.data().balance || 0 : 0;
   userBalance.textContent = balance.toFixed(2) + 'µ';
 }
+function listenToBalanceChanges() {
+  const userRef = db.collection('users').doc(currentUser.displayName);
+  userRef.onSnapshot(doc => {
+    if (doc.exists) {
+      const balance = doc.data().balance || 0;
+      userBalance.textContent = balance.toFixed(2) + 'µ';
+    }
+  });
+}
 
 function showNotification(msg) {
   notif.textContent = msg;
@@ -434,7 +443,8 @@ async function initApp() {
   loadOrganisations();
   loadOnlineUsers();
   listenToIncomingTransfers();
-  listenToOrganisationTransfers(); // ← ICI
+  listenToOrganisationTransfers();
+  listenToBalanceChanges(); // ← Ajout ici
   setInterval(loadOnlineUsers, 10000);
 }
 
