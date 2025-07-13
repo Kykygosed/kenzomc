@@ -383,8 +383,10 @@ async function loadOrganisations() {
       const userSnap = await db.ref(`users/${pseudo}`).once('value');
       if (!userSnap.exists()) return showNotification("Utilisateur introuvable.");
 
-      await db.ref(`users/${pseudo}/organisations/${orgId}`).set(true);
-      showNotification(`${pseudo} ajouté à l'organisation !`);
+await db.ref(`users/${pseudo}/organisations/${orgId}`).set(true);
+await db.ref(`organisations/${orgId}/members/${pseudo}`).set(true);
+showNotification(`${pseudo} ajouté à l'organisation !`);
+
     });
   });
 }
