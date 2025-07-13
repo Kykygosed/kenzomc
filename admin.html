@@ -144,24 +144,27 @@ window.showSection = function(id) {
   }
 
   async function loadLogs() {
-    const container = document.getElementById('logs');
+  const container = document.getElementById('logs');
+  container.innerHTML = '<h2>Logs</h2>';
+  const virementsQuery = query(ref(db, 'virements'), orderByChild('timestamp'), limitToLast(50));
+  onValue(virementsQuery, (snapshot) => {
     container.innerHTML = '<h2>Logs</h2>';
-    const virementsQuery = query(ref(db, 'virements'), orderByChild('timestamp'), limitToLast(50));
-    onValue(virementsQuery, (snapshot) => {
-      container.innerHTML = '<h2>Logs</h2>';
-      const logs = [];
-      snapshot.forEach(child => {
-        const data = child.val();
-        logs.push(`[💸] ${data.from} → ${data.to} : ${data.amount.toFixed(2)}µ`);
-      });
-      logs.reverse().forEach(log => {
-        const div = document.createElement('div');
-        div.className = 'log-entry';
-        div.textContent = log;
-        container.appendChild(div);
-      });
+    const logs = [];
+    snapshot.forEach(child => {
+      const data = child.val();
+      const from = data.from;
+      const to = data.to.startsWith("org:") ? "Organisation " + data.to.substring(4) : data.to;
+      logs.push(`[💸] ${from} → ${to} : ${data.amount.toFixed(2)}µ`);
     });
-  }
+    logs.reverse().forEach(log => {
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      div.textContent = log;
+      container.appendChild(div);
+    });
+  });
+}
+
 
   // Action functions
   window.setBalance = async function (userId) {
