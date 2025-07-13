@@ -191,24 +191,24 @@ window.showSection = function(id) {
     await update(ref(db, "organisations/" + orgId), { balance: n });
   };
 
-  window.addMember = async function (orgId) {
-    const input = document.getElementById("add-" + orgId);
-    const pseudo = input.value.trim();
-    if (!pseudo) return;
+window.addMember = async function (orgId) {
+  const input = document.getElementById("add-" + orgId);
+  const pseudo = input.value.trim();
+  if (!pseudo) return;
 
-    const membersRef = ref(db, "organisations/" + orgId + "/members");
-    const snapshot = await get(membersRef);
-    const members = snapshot.exists() ? snapshot.val() : [];
-    members.push(pseudo);
-    await update(ref(db, "organisations/" + orgId), { members });
+  const memberRef = ref(db, "organisations/" + orgId + "/members/" + pseudo);
+  await set(memberRef, true);
 
-    const currentUser = auth.currentUser;
-    const pseudoAdmin = currentUser.displayName;
-    await push(ref(db, "logs"), {
-      message: `${pseudoAdmin} a ajouté ${pseudo} à l'organisation ${orgId}`,
-      timestamp: Date.now()
-    });
-  };
+  const currentUser = auth.currentUser;
+  const pseudoAdmin = currentUser.displayName;
+  await push(ref(db, "logs"), {
+    message: `${pseudoAdmin} a ajouté ${pseudo} à l'organisation ${orgId}`,
+    timestamp: Date.now()
+  });
+
+  input.value = ""; // reset input
+};
+
 
   window.removeMember = async function (orgId, pseudo) {
     const membersRef = ref(db, "organisations/" + orgId + "/members");
