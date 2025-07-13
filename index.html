@@ -505,34 +505,49 @@ document.getElementById('confirm-virement').onclick = async () => {
   if (solde < montant) return alert("Pas assez d'argent !");
 
   if (destinataire) {
-    const destRef = db.collection('users').doc(destinataire);
-    const destSnap = await destRef.get();
-    if (destSnap.exists) {
-      await destRef.update({
-        balance: firebase.firestore.FieldValue.increment(montant)
-      });
-      await db.collection('virements').add({
-        to: destinataire,
-        from: currentUser.displayName,
-        amount: montant,
-        seen: false
-      });
-    }
-  } else if (orgId) {
-    const orgRef = db.collection('organisations').doc(orgId);
-    await orgRef.update({
-      balance: firebase.firestore.FieldValue.increment(montant),
-      lastAmount: montant,
-      lastFrom: currentUser.displayName
+  const destRef = db.collection('users').doc(destinataire);
+  const destSnap = await destRef.get();
+  if (destSnap.exists) {
+    await destRef.update({
+      balance: firebase.firestore.FieldValue.increment(montant)
     });
-    await db.collection('org_transfers').add({
-      orgId: orgId,
-      amount: montant,
+    await db.collection('virements').add({
+      to: destinataire,
       from: currentUser.displayName,
+      amount: montant,
+      seen: false
+    });
+
+    // 🔹 Ajout du log personnel
+    await db.collection('logs').add({
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      seenBy: [] // liste de membres ayant vu la notif
+      message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à ${destinataire}`
     });
   }
+} else if (orgId) {
+  const orgRef = db.collection('organisations').doc(orgId);
+  const orgSnap = await orgRef.get();
+  const orgName = orgSnap.exists ? orgSnap.data().name : "une organisation";
+
+  await orgRef.update({
+    balance: firebase.firestore.FieldValue.increment(montant),
+    lastAmount: montant,
+    lastFrom: currentUser.displayName
+  });
+
+  await db.collection('org_transfers').add({
+    orgId: orgId,
+    amount: montant,
+    from: currentUser.displayName,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+    seenBy: []
+  });
+
+  // 🔹 Ajout du log organisation
+  await db.collection('logs').add({
+    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+    message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à l'organisation ${o
+
 
   await userRef.update({
     balance: firebase.firestore.FieldValue.increment(-montant)
