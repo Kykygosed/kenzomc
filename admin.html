@@ -24,24 +24,43 @@ body {
 }
 
 .sidebar button {
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
   margin-bottom: 15px;
-  background: #2a2a2a;
-  color: #ffffff;
-  border: 1px solid #444;
+  background: transparent;
+  color: white;
+  border: none;
   padding: 12px;
   cursor: pointer;
   font-size: 10px;
-  border-radius: 8px;
-  transition: background 0.3s, transform 0.2s, box-shadow 0.3s;
+  font-family: 'Press Start 2P', cursive;
+  position: relative;
+  text-align: left;
+  transition: color 0.3s;
+}
+
+.sidebar button::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10%;
+  bottom: 10%;
+  width: 4px;
+  background-color: #00ff88;
+  opacity: 0;
+  transition: opacity 0.3s;
+  border-radius: 2px;
 }
 
 .sidebar button:hover {
-  background: #3c3c3c;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(255, 255, 255, 0.1);
+  color: #00ff88;
 }
+
+.sidebar button:hover::before {
+  opacity: 1;
+}
+
 
 /* Main content */
 .main {
