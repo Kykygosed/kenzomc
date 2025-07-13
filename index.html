@@ -424,12 +424,28 @@ loginBtn.onclick = async () => {
     const pass = passwordInput.value;
     await auth.signInWithEmailAndPassword(email, pass);
     currentUser = usernameInput.value;
-    await setOnlineStatus(true);
+
+    // 🔍 Vérifie si l'utilisateur a déjà un profil enregistré
+    const userRef = db.ref(`users/${currentUser}`);
+    const snapshot = await userRef.once('value');
+
+    if (!snapshot.exists()) {
+      // 🆕 Nouveau : première connexion → attribuer 50µ
+      await userRef.set({
+        balance: 50,
+        online: true
+      });
+      console.log("Premier login détecté : 50µ attribués !");
+    } else {
+      await setOnlineStatus(true);
+    }
+
     initApp();
   } catch {
     showNotification("Erreur de connexion !");
   }
 };
+
 
 signupBtn.onclick = async () => {
   try {
