@@ -99,7 +99,7 @@ const firebaseConfig = {
       const doc = await db.collection("users").doc(uid).get();
       const pseudo = doc.data()?.pseudo;
       if (!["canari851", "kykygosed", "Kenzou_TV"].includes(pseudo)) {
-        window.location.href = "maintenance.html";
+        window.location.href = "admin.html";
         return;
       }
       showPage('logs');
