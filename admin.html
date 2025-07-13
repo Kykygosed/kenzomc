@@ -129,8 +129,10 @@ async function loadOrganisations() {
     container.innerHTML = '<h2>Organisations</h2>';
     snapshot.forEach(child => {
       const data = child.val();
-      const membersHTML = (data.members || []).map(m => `<span>${m} <button onclick="removeMember('${child.key}','${m}')">✕</button></span>`).join(' ');
       const div = document.createElement('div');
+      const membersHTML = Array.isArray(data.members)
+        ? data.members.map(m => `<span>${m} <button onclick="removeMember('${child.key}','${m}')">✕</button></span>`).join(' ')
+        : '';
       div.className = 'org-entry';
       div.innerHTML = `
         <strong>${data.name}</strong> (Balance: ${(data.balance || 0).toFixed(2)}µ)
@@ -150,7 +152,6 @@ async function loadLogs() {
   container.innerHTML = '<h2>Logs</h2>';
   const logs = [];
 
-  // Précharger les noms d'organisations
   const orgNameMap = {};
   const orgSnap = await get(ref(db, 'organisations'));
   if (orgSnap.exists()) {
@@ -159,7 +160,6 @@ async function loadLogs() {
     });
   }
 
-  // Virements classiques
   const virementsSnap = await get(query(ref(db, 'virements'), limitToLast(50)));
   if (virementsSnap.exists()) {
     virementsSnap.forEach(child => {
@@ -172,7 +172,6 @@ async function loadLogs() {
     });
   }
 
-  // Virements vers organisations
   const orgsSnap = await get(ref(db, 'org_transfers'));
   if (orgsSnap.exists()) {
     const orgsData = orgsSnap.val();
@@ -190,7 +189,6 @@ async function loadLogs() {
     }
   }
 
-  // Tri et affichage
   logs.sort((a, b) => b.timestamp - a.timestamp);
   logs.slice(0, 50).forEach(log => {
     const div = document.createElement('div');
@@ -200,7 +198,13 @@ async function loadLogs() {
   });
 }
 
-// Actions
+async function logAction(message) {
+  await push(ref(db, "logs"), {
+    message,
+    timestamp: Date.now()
+  });
+}
+
 window.setBalance = async function (userId) {
   const val = prompt("Nouvelle balance ? (en µ)");
   const n = parseFloat(val);
@@ -235,19 +239,26 @@ window.addMember = async function (orgId) {
 
   const memberRef = ref(db, `organisations/${orgId}/members`);
   const snap = await get(memberRef);
-  const members = snap.exists() ? snap.val() : [];
+  let members = [];
+
+  if (snap.exists()) {
+    const val = snap.val();
+    if (Array.isArray(val)) {
+      members = val;
+    } else if (typeof val === 'object') {
+      members = Object.values(val);
+    }
+  }
+
   if (!members.includes(pseudo)) {
     members.push(pseudo);
     await update(ref(db, "organisations/" + orgId), { members });
   }
 
   const currentUser = auth.currentUser;
-  const pseudoAdmin = currentUser.displayName;
-  await push(ref(db, "logs"), {
-    message: `${pseudoAdmin} a ajouté ${pseudo} à l'organisation ${orgId}`,
-    timestamp: Date.now()
-  });
+  const pseudoAdmin = currentUser?.displayName || "inconnu";
 
+  await logAction(`${pseudoAdmin} a ajouté ${pseudo} à l'organisation ${orgId}`);
   input.value = "";
 };
 
@@ -256,14 +267,15 @@ window.removeMember = async function (orgId, pseudo) {
   const snapshot = await get(membersRef);
   if (!snapshot.exists()) return;
 
-  const members = snapshot.val().filter(m => m !== pseudo);
+  let members = snapshot.val();
+  if (!Array.isArray(members)) members = Object.values(members);
+  members = members.filter(m => m !== pseudo);
   await update(ref(db, "organisations/" + orgId), { members });
 };
 
-// Auth
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async user => {
   if (!user) return location.href = "/index.html";
-  const pseudo = user.displayName;
+  const pseudo = user.displayName || "inconnu";
   if (!allowedAdmins.includes(pseudo)) {
     document.body.innerHTML = `<div style="color:white;text-align:center;padding:50px;">
       <h1>Accès refusé</h1>
@@ -277,8 +289,9 @@ onAuthStateChanged(auth, user => {
   loadOrganisations();
   loadLogs();
 });
-
 </script>
+
+
 
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </body>
