@@ -231,6 +231,7 @@ const db = firebase.database();
 
 let currentUser = null;
 
+// Références DOM
 const loginBtn = document.getElementById('login-btn');
 const signupBtn = document.getElementById('signup-btn');
 const usernameInput = document.getElementById('username');
@@ -240,7 +241,6 @@ const orgList = document.getElementById('org-list');
 const chime = document.getElementById('chime');
 const notif = document.getElementById('notification');
 const onlineUsers = document.getElementById('online-users');
-
 const modal = document.getElementById('virement-modal');
 const montantInput = document.getElementById('virement-montant');
 const destinataireInput = document.getElementById('virement-destinataire');
@@ -254,10 +254,13 @@ function toggleModal(show = true) {
     organisationSelect.innerHTML = `<option value="">Aucune organisation</option>`;
     db.ref('organisations').once('value', snapshot => {
       snapshot.forEach(org => {
-        const opt = document.createElement("option");
-        opt.value = org.key;
-        opt.textContent = org.val().name;
-        organisationSelect.appendChild(opt);
+        const orgData = org.val();
+        if (orgData) {
+          const opt = document.createElement("option");
+          opt.value = org.key;
+          opt.textContent = orgData.name;
+          organisationSelect.appendChild(opt);
+        }
       });
     });
   }
@@ -273,21 +276,21 @@ function showNotification(msg) {
 async function updateBalanceUI() {
   const snap = await db.ref(`users/${currentUser}`).once('value');
   const balance = snap.val()?.balance ?? 0;
-  userBalance.textContent = balance.toFixed(2) + 'µ';
+  userBalance.textContent = `${parseFloat(balance).toFixed(2)}µ`;
 }
 
 function listenToBalanceChanges() {
   db.ref(`users/${currentUser}/balance`).on('value', snap => {
     const balance = snap.val() ?? 0;
-    userBalance.textContent = balance.toFixed(2) + 'µ';
+    userBalance.textContent = `${parseFloat(balance).toFixed(2)}µ`;
   });
 }
 
 function listenToIncomingTransfers() {
-  db.ref("virements").on('child_added', async snap => {
+  db.ref("virements").on('child_added', snap => {
     const data = snap.val();
-    if (data.to === currentUser && !data.seen) {
-      showNotification(`${data.from} vous a envoyé ${data.amount.toFixed(2)}µ`);
+    if (data?.to === currentUser && !data.seen) {
+      showNotification(`${data.from} vous a envoyé ${parseFloat(data.amount).toFixed(2)}µ`);
       db.ref(`virements/${snap.key}/seen`).set(true);
     }
   });
@@ -299,12 +302,12 @@ function listenToOrganisationTransfers() {
     Object.keys(orgs).forEach(orgId => {
       db.ref(`org_transfers/${orgId}`).on('child_added', transSnap => {
         const trans = transSnap.val();
-        const seenBy = trans.seenBy || [];
+        const seenBy = trans?.seenBy || [];
         if (!seenBy.includes(currentUser)) {
           db.ref(`organisations/${orgId}/name`).once('value', nameSnap => {
             const orgName = nameSnap.val() || "une organisation";
-            showNotification(`${trans.from} a versé ${trans.amount.toFixed(2)}µ à ${orgName}`);
-            db.ref(`org_transfers/${orgId}/${transSnap.key}/seenBy`).push(currentUser);
+            showNotification(`${trans.from} a versé ${parseFloat(trans.amount).toFixed(2)}µ à ${orgName}`);
+            db.ref(`org_transfers/${orgId}/${transSnap.key}/seenBy`).set([...seenBy, currentUser]);
           });
         }
       });
@@ -314,27 +317,29 @@ function listenToOrganisationTransfers() {
 
 async function loadOrganisations() {
   orgList.innerHTML = "<h3>Organisations</h3>";
-  const userOrgsSnap = await db.ref(`users/${currentUser}/organisations`).once('value');
-  const userOrgs = userOrgsSnap.val() || {};
+  const userOrgs = (await db.ref(`users/${currentUser}/organisations`).once('value')).val() || {};
 
   for (const orgId in userOrgs) {
     const orgSnap = await db.ref(`organisations/${orgId}`).once('value');
     const data = orgSnap.val();
+    if (!data) continue;
+
     const div = document.createElement("div");
     div.classList.add("organisation-box");
+    const balance = parseFloat(data.balance) || 0;
 
-    const html = `
+    div.innerHTML = `
       <div class="org-content">
         <strong>${data.name}</strong><br>
         Créé par: ${data.creator}<br>
-        Balance: ${data.balance.toFixed(2)}µ
+        Balance: ${balance.toFixed(2)}µ
       </div>
       <div class="org-buttons">
-        <button class="recuperer-btn" data-orgid="${orgId}" data-balance="${data.balance}">Récupérer</button>
+        <button class="recuperer-btn" data-orgid="${orgId}" data-balance="${balance}">Récupérer</button>
         <button class="ajouter-btn" data-orgid="${orgId}">Ajouter membre</button>
       </div>
     `;
-    div.innerHTML = html;
+
     orgList.appendChild(div);
   }
 
@@ -344,16 +349,16 @@ async function loadOrganisations() {
       const balance = parseFloat(btn.dataset.balance);
       const input = prompt("Combien voulez-vous récupérer ?");
       if (!input) return;
+
       const montant = parseFloat(input.replace(",", "."));
       if (isNaN(montant) || montant <= 0 || montant > balance) {
-        return alert("Montant invalide !");
+        return showNotification("Montant invalide !");
       }
 
       await db.ref(`organisations/${orgId}/balance`).set(balance - montant);
-      const userSnap = await db.ref(`users/${currentUser}/balance`).once('value');
-      const newUserBalance = (userSnap.val() || 0) + montant;
+      const userBalSnap = await db.ref(`users/${currentUser}/balance`).once('value');
+      const newUserBalance = (userBalSnap.val() || 0) + montant;
       await db.ref(`users/${currentUser}/balance`).set(newUserBalance);
-
       updateBalanceUI();
       loadOrganisations();
     });
@@ -366,10 +371,10 @@ async function loadOrganisations() {
       if (!pseudo) return;
 
       const userSnap = await db.ref(`users/${pseudo}`).once('value');
-      if (!userSnap.exists()) return alert("Utilisateur introuvable.");
+      if (!userSnap.exists()) return showNotification("Utilisateur introuvable.");
 
       await db.ref(`users/${pseudo}/organisations/${orgId}`).set(true);
-      alert(`${pseudo} ajouté à l'organisation !`);
+      showNotification(`${pseudo} ajouté à l'organisation !`);
     });
   });
 }
@@ -385,8 +390,8 @@ function loadOnlineUsers() {
   });
 }
 
-async function setOnlineStatus(status) {
-  await db.ref(`users/${currentUser}/online`).set(status);
+function setOnlineStatus(status) {
+  return db.ref(`users/${currentUser}/online`).set(status);
 }
 
 async function initApp() {
@@ -402,6 +407,7 @@ async function initApp() {
   setInterval(loadOnlineUsers, 10000);
 }
 
+// Auth
 loginBtn.onclick = async () => {
   try {
     const email = usernameInput.value + "@mail.com";
@@ -411,7 +417,7 @@ loginBtn.onclick = async () => {
     await setOnlineStatus(true);
     initApp();
   } catch {
-    alert("Erreur de connexion !");
+    showNotification("Erreur de connexion !");
   }
 };
 
@@ -427,10 +433,11 @@ signupBtn.onclick = async () => {
     });
     initApp();
   } catch {
-    alert("Erreur d'inscription !");
+    showNotification("Erreur d'inscription !");
   }
 };
 
+// Boutons
 document.getElementById('new-org').onclick = async () => {
   const name = prompt("Nom de l'organisation");
   if (!name) return;
@@ -453,17 +460,21 @@ document.getElementById('confirm-virement').onclick = async () => {
 
   const userSnap = await db.ref(`users/${currentUser}/balance`).once('value');
   const solde = userSnap.val() || 0;
-  if (montant > solde || isNaN(montant) || montant <= 0) return alert("Montant invalide ou solde insuffisant");
+
+  if (montant > solde || isNaN(montant) || montant <= 0) {
+    return showNotification("Montant invalide ou solde insuffisant !");
+  }
 
   if (destinataire) {
     const destSnap = await db.ref(`users/${destinataire}`).once('value');
-    if (!destSnap.exists()) return alert("Destinataire introuvable.");
+    if (!destSnap.exists()) return showNotification("Destinataire introuvable.");
 
     await db.ref(`users/${destinataire}/balance`).set((destSnap.val().balance || 0) + montant);
     await db.ref('virements').push({ from: currentUser, to: destinataire, amount: montant, seen: false });
   } else if (orgId) {
     const orgSnap = await db.ref(`organisations/${orgId}/balance`).once('value');
-    await db.ref(`organisations/${orgId}/balance`).set((orgSnap.val() || 0) + montant);
+    const newOrgBal = (orgSnap.val() || 0) + montant;
+    await db.ref(`organisations/${orgId}/balance`).set(newOrgBal);
     await db.ref(`org_transfers/${orgId}`).push({ from: currentUser, amount: montant, seenBy: [] });
   }
 
@@ -473,7 +484,11 @@ document.getElementById('confirm-virement').onclick = async () => {
   loadOrganisations();
 };
 
-window.addEventListener("beforeunload", () => setOnlineStatus(false));
+// Déconnexion automatique (mise en hors ligne)
+window.addEventListener("beforeunload", () => {
+  if (currentUser) setOnlineStatus(false);
+});
+
 
 </script>
 
