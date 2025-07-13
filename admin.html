@@ -1,222 +1,127 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
   <title>Admin Panel</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <style>
     body {
-      margin: 0;
       font-family: 'Press Start 2P', cursive;
-      background-color: #1e1e1e;
-      color: white;
+      background-color: #121212;
+      color: #fff;
       display: flex;
+      margin: 0;
     }
     .sidebar {
-      width: 220px;
-      background: #111;
-      height: 100vh;
+      width: 250px;
+      background-color: #1e1e1e;
       padding: 20px;
-      box-sizing: border-box;
+      height: 100vh;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.5);
     }
     .sidebar button {
       display: block;
       width: 100%;
-      margin-bottom: 15px;
-      background: #333;
-      color: white;
+      margin-bottom: 20px;
+      background-color: #333;
+      color: #fff;
       border: none;
       padding: 10px;
       cursor: pointer;
-      font-size: 10px;
     }
-    .main {
+    .content {
       flex: 1;
       padding: 20px;
       overflow-y: auto;
     }
-    .section {
+    .hidden {
       display: none;
     }
-    .section.active {
-      display: block;
-    }
-    .user-entry, .org-entry, .log-entry {
-      background: #292929;
-      margin-bottom: 10px;
+    .log-entry {
+      background: #222;
       padding: 10px;
-      border-radius: 5px;
-    }
-    .user-entry span, .org-entry span {
-      margin-right: 10px;
-    }
-    .member-list span {
-      display: inline-block;
-      margin: 5px;
-      background: #444;
-      padding: 3px 5px;
-      border-radius: 3px;
-    }
-    input[type="number"] {
-      width: 80px;
-      padding: 5px;
-      margin-left: 5px;
-    }
-    .action-btn {
-      margin-left: 10px;
-      background: #444;
-      color: white;
-      border: none;
-      padding: 5px 10px;
-      cursor: pointer;
-      font-size: 10px;
+      margin: 5px 0;
+      border-left: 5px solid #4caf50;
     }
   </style>
 </head>
 <body>
   <div class="sidebar">
-    <button onclick="showSection('users')">Utilisateurs</button>
-    <button onclick="showSection('orgs')">Organisations</button>
-    <button onclick="showSection('logs')">Logs</button>
+    <button onclick="showPage('users')">Utilisateurs</button>
+    <button onclick="showPage('orgs')">Organisations</button>
+    <button onclick="showPage('logs')">Logs</button>
   </div>
-  <div class="main">
-    <div id="users" class="section"></div>
-    <div id="orgs" class="section"></div>
-    <div id="logs" class="section"></div>
+  <div class="content">
+    <div id="users" class="page hidden">
+      <h2>Utilisateurs</h2>
+      <div id="user-list"></div>
+    </div>
+    <div id="orgs" class="page hidden">
+      <h2>Organisations</h2>
+      <div id="org-list"></div>
+    </div>
+    <div id="logs" class="page hidden">
+      <h2>Logs</h2>
+      <div id="log-list" class="logs-container"></div>
+    </div>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
   <script>
     const firebaseConfig = {
-      apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
-      authDomain: "kykychat-24c7f.firebaseapp.com",
-      projectId: "kykychat-24c7f"
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
     };
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
     const auth = firebase.auth();
+    const db = firebase.firestore();
 
-    const allowedAdmins = ["canari851", "kykygosed", "Kenzou_TV"];
-
-    function showSection(id) {
-      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
-    }
-
-    async function loadUsers() {
-      const container = document.getElementById('users');
-      container.innerHTML = '<h2>Utilisateurs</h2>';
-      const snap = await db.collection('users').get();
-      snap.forEach(doc => {
-        const div = document.createElement('div');
-        div.className = 'user-entry';
-        div.innerHTML = `
-          <span>${doc.id}</span>
-          <span>Balance: <span id="bal-${doc.id}">${doc.data().balance?.toFixed(2) || 0}µ</span></span>
-          <button class="action-btn" onclick="setBalance('${doc.id}')">Modifier</button>
-          <button class="action-btn" onclick="deleteUser('${doc.id}')">Supprimer</button>
-        `;
-        container.appendChild(div);
+    function showPage(pageId) {
+      document.querySelectorAll('.page').forEach(page => {
+        page.classList.add('hidden');
       });
-    }
-
-    async function loadOrganisations() {
-      const container = document.getElementById('orgs');
-      container.innerHTML = '<h2>Organisations</h2>';
-      const snap = await db.collection('organisations').get();
-      snap.forEach(doc => {
-        const data = doc.data();
-        const div = document.createElement('div');
-        div.className = 'org-entry';
-        const membersHTML = data.members.map(m => `<span>${m} <button onclick=\"removeMember('${doc.id}','${m}')\">✕</button></span>`).join(' ');
-        div.innerHTML = `
-          <strong>${data.name}</strong> (Balance: ${data.balance.toFixed(2)}µ)
-          <br><button class="action-btn" onclick="deleteOrg('${doc.id}')">Supprimer</button>
-          <button class="action-btn" onclick="modifyOrgBalance('${doc.id}')">Modifier balance</button>
-          <br><strong>Membres :</strong><div class="member-list">${membersHTML}</div>
-          <input type="text" id="add-${doc.id}" placeholder="@pseudo" style="width: 140px;" />
-          <button class="action-btn" onclick="addMember('${doc.id}')">Ajouter membre</button>
-        `;
-        container.appendChild(div);
-      });
-    }
-
-    async function loadLogs() {
-      const container = document.getElementById('logs');
-      container.innerHTML = '<h2>Logs</h2>';
-      db.collection("logs").orderBy("timestamp", "desc").limit(50).onSnapshot(snapshot => {
-        container.innerHTML = '<h2>Logs</h2>';
-        snapshot.forEach(doc => {
-          const div = document.createElement('div');
-          div.className = 'log-entry';
-          div.textContent = doc.data().message;
-          container.appendChild(div);
-        });
-      });
-    }
-
-    async function setBalance(userId) {
-      const val = prompt("Nouvelle balance ? (en µ)");
-      const n = parseFloat(val);
-      if (isNaN(n)) return;
-      await db.collection("users").doc(userId).update({ balance: n });
-      document.getElementById("bal-"+userId).textContent = n.toFixed(2)+"µ";
-    }
-
-    async function deleteUser(userId) {
-      if (confirm("Supprimer cet utilisateur ?")) {
-        await db.collection("users").doc(userId).delete();
-        loadUsers();
-      }
-    }
-
-    async function deleteOrg(orgId) {
-      if (confirm("Supprimer cette organisation ?")) {
-        await db.collection("organisations").doc(orgId).delete();
-        loadOrganisations();
-      }
-    }
-
-    async function modifyOrgBalance(orgId) {
-      const val = prompt("Nouvelle balance ? (en µ)");
-      const n = parseFloat(val);
-      if (isNaN(n)) return;
-      await db.collection("organisations").doc(orgId).update({ balance: n });
-      loadOrganisations();
-    }
-
-    async function addMember(orgId) {
-      const input = document.getElementById("add-" + orgId);
-      const pseudo = input.value.trim();
-      if (!pseudo) return;
-      await db.collection("organisations").doc(orgId).update({
-        members: firebase.firestore.FieldValue.arrayUnion(pseudo)
-      });
-      await db.collection("logs").add({
-        message: `${auth.currentUser.displayName} a ajouté ${pseudo} à l'organisation ${orgId}`,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      loadOrganisations();
-    }
-
-    async function removeMember(orgId, pseudo) {
-      await db.collection("organisations").doc(orgId).update({
-        members: firebase.firestore.FieldValue.arrayRemove(pseudo)
-      });
-      loadOrganisations();
+      document.getElementById(pageId).classList.remove('hidden');
     }
 
     auth.onAuthStateChanged(async user => {
-      if (!user) return location.href = "/index.html";
-      const pseudo = user.displayName;
-      if (!allowedAdmins.includes(pseudo)) return location.href = "/maintenance.html";
-      showSection('users');
-      loadUsers();
-      loadOrganisations();
+      if (!user) {
+        window.location.href = 'index.html';
+        return;
+      }
+      const uid = user.uid;
+      const doc = await db.collection("users").doc(uid).get();
+      const pseudo = doc.data()?.pseudo;
+      if (!["canari851", "kykygosed", "Kenzou_TV"].includes(pseudo)) {
+        window.location.href = "maintenance.html";
+        return;
+      }
+      showPage('logs');
       loadLogs();
     });
+
+    function loadLogs() {
+      const logContainer = document.getElementById('log-list');
+      db.collection("logs")
+        .orderBy("timestamp", "desc")
+        .limit(100)
+        .onSnapshot(snapshot => {
+          logContainer.innerHTML = "";
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            const div = document.createElement("div");
+            div.className = "log-entry";
+            div.textContent = data.message;
+            logContainer.appendChild(div);
+          });
+        });
+    }
   </script>
 </body>
 </html>
+
