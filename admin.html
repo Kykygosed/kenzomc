@@ -1,164 +1,79 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Panel</title>
+  <meta charset="UTF-8">
+  <title>Panneau Admin</title>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
   <style>
-body {
-  margin: 0;
-  font-family: 'Press Start 2P', cursive;
-  background-color: #1e1e1e;
-  color: #ffffff;
-  display: flex;
-}
-
-/* Sidebar */
-.sidebar {
-  width: 220px;
-  background: linear-gradient(180deg, #0f0f0f, #1a1a1a);
-  height: 100vh;
-  padding: 20px;
-  box-sizing: border-box;
-  box-shadow: 4px 0 10px rgba(0, 0, 0, 0.4);
-}
-
-.sidebar button {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  margin-bottom: 15px;
-  background: transparent;
-  color: white;
-  border: none;
-  padding: 12px;
-  cursor: pointer;
-  font-size: 10px;
-  font-family: 'Press Start 2P', cursive;
-  position: relative;
-  text-align: left;
-  transition: color 0.3s;
-}
-
-.sidebar button::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 10%;
-  bottom: 10%;
-  width: 4px;
-  background-color: #00ff88;
-  opacity: 0;
-  transition: opacity 0.3s;
-  border-radius: 2px;
-}
-
-.sidebar button:hover {
-  color: #00ff88;
-}
-
-.sidebar button:hover::before {
-  opacity: 1;
-}
-
-
-/* Main content */
-.main {
-  flex: 1;
-  padding: 30px;
-  overflow-y: auto;
-}
-
-/* Section visibility */
-.section {
-  display: none;
-}
-
-.section.active {
-  display: block;
-}
-
-/* Entries styling */
-.user-entry, .org-entry, .log-entry {
-  background: #2b2b2b;
-  margin-bottom: 15px;
-  padding: 15px;
-  border-radius: 10px;
-  border: 1px solid #3a3a3a;
-  transition: transform 0.2s, background 0.3s;
-}
-
-.user-entry:hover, .org-entry:hover, .log-entry:hover {
-  background: #333;
-  transform: scale(1.02);
-}
-
-.user-entry span, .org-entry span {
-  margin-right: 10px;
-}
-
-/* Member list style */
-.member-list span {
-  display: inline-block;
-  margin: 5px 5px 0 0;
-  background: #444;
-  padding: 5px 8px;
-  border-radius: 6px;
-  font-size: 9px;
-  transition: background 0.3s;
-}
-
-.member-list span:hover {
-  background: #5a5a5a;
-}
-
-/* Number inputs */
-input[type="number"] {
-  width: 80px;
-  padding: 6px 8px;
-  margin-left: 5px;
-  background: #222;
-  color: white;
-  border: 1px solid #555;
-  border-radius: 5px;
-  font-family: 'Press Start 2P', cursive;
-}
-
-/* Action buttons */
-.action-btn {
-  margin-left: 10px;
-  background: #444;
-  color: white;
-  border: 1px solid #666;
-  padding: 6px 12px;
-  cursor: pointer;
-  font-size: 10px;
-  border-radius: 6px;
-  transition: background 0.3s, transform 0.2s;
-}
-
-.action-btn:hover {
-  background: #5e5e5e;
-  transform: scale(1.05);
-}
-
+    body {
+      margin: 0;
+      font-family: 'Press Start 2P', cursive;
+      background-color: #121212;
+      color: white;
+      display: flex;
+      height: 100vh;
+    }
+    .sidebar {
+      width: 220px;
+      background-color: #1e1e1e;
+      padding: 20px;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+    }
+    .sidebar button {
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 10px;
+      background-color: #333;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .sidebar button:hover {
+      background-color: #555;
+    }
+    .content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .section {
+      display: none;
+    }
+    .section.active {
+      display: block;
+    }
+    .user-entry, .org-entry, .log-entry {
+      background-color: #222;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 8px;
+    }
+    .action-btn {
+      margin: 5px;
+      padding: 5px 10px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .member-list span {
+      margin-right: 8px;
+    }
   </style>
 </head>
 <body>
   <div class="sidebar">
-    <button onclick="showSection('users')">Utilisateurs</button>
-    <button onclick="showSection('orgs')">Organisations</button>
-    <button onclick="showSection('logs')">Logs</button>
+    <button onclick="showSection('users')">👤 Utilisateurs</button>
+    <button onclick="showSection('orgs')">🏢 Organisations</button>
+    <button onclick="showSection('logs')">📜 Logs</button>
   </div>
-  <div class="main">
+  <div class="content">
     <div id="users" class="section"></div>
     <div id="orgs" class="section"></div>
     <div id="logs" class="section"></div>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
@@ -184,8 +99,8 @@ input[type="number"] {
         const div = document.createElement('div');
         div.className = 'user-entry';
         div.innerHTML = `
-          <span>${doc.id}</span>
-          <span>Balance: <span id="bal-${doc.id}">${doc.data().balance?.toFixed(2) || 0}µ</span></span>
+          <span>${doc.id}</span><br>
+          <span>Balance: <span id="bal-${doc.id}">${doc.data().balance?.toFixed(2) || 0}µ</span></span><br>
           <button class="action-btn" onclick="setBalance('${doc.id}')">Modifier</button>
           <button class="action-btn" onclick="deleteUser('${doc.id}')">Supprimer</button>
         `;
@@ -201,7 +116,7 @@ input[type="number"] {
         const data = doc.data();
         const div = document.createElement('div');
         div.className = 'org-entry';
-        const membersHTML = data.members.map(m => `<span>${m} <button onclick=\"removeMember('${doc.id}','${m}')\">✕</button></span>`).join(' ');
+        const membersHTML = data.members.map(m => `<span>${m} <button onclick="removeMember('${doc.id}','${m}')">✕</button></span>`).join(' ');
         div.innerHTML = `
           <strong>${data.name}</strong> (Balance: ${data.balance.toFixed(2)}µ)
           <br><button class="action-btn" onclick="deleteOrg('${doc.id}')">Supprimer</button>
@@ -279,24 +194,23 @@ input[type="number"] {
       loadOrganisations();
     }
 
-auth.onAuthStateChanged(async user => {
-  if (!user) return location.href = "/index.html";
-  const pseudo = user.displayName;
+    auth.onAuthStateChanged(async user => {
+      if (!user) return location.href = "/index.html";
+      const pseudo = user.displayName;
+      if (!allowedAdmins.includes(pseudo)) {
+        document.body.innerHTML = `<div style="color:white;text-align:center;padding:50px;">
+          <h1>Accès refusé</h1>
+          <p>Désolé ${pseudo}, tu n'es pas autorisé à accéder à cette page.</p>
+        </div>`;
+        return;
+      }
 
-  if (!allowedAdmins.includes(pseudo)) {
-    document.body.innerHTML = `<div style="color:white;text-align:center;padding:50px;">
-      <h1>Accès refusé</h1>
-      <p>Désolé ${pseudo}, tu n'es pas autorisé à accéder à cette page.</p>
-    </div>`;
-    return;
-  }
-
-  showSection('users');
-  loadUsers();
-  loadOrganisations();
-  loadLogs();
-});
-
+      showSection('users');
+      loadUsers();
+      loadOrganisations();
+      loadLogs();
+    });
   </script>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 </body>
 </html>
