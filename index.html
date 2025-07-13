@@ -276,6 +276,7 @@ function showNotification(msg) {
   setTimeout(() => notif.style.display = 'none', 5000);
 }
 
+
 async function listenToIncomingTransfers() {
   db.collection('virements')
     .where("to", "==", currentUser.displayName)
@@ -290,8 +291,10 @@ async function listenToIncomingTransfers() {
 }
 
 function listenToOrganisationTransfers() {
+  const userPseudo = currentUser.displayName;
+
   db.collection("organisations")
-    .where("members", "array-contains", currentUser.displayName)
+    .where("members", "array-contains", userPseudo)
     .onSnapshot((snapshot) => {
       const orgMap = {};
       snapshot.forEach((doc) => {
@@ -300,25 +303,32 @@ function listenToOrganisationTransfers() {
 
       if (Object.keys(orgMap).length === 0) return;
 
+      // Attention : on ne peut pas faire un .where("seenBy", "not-in", [...]) si liste vide → on vérifie manuellement
       db.collection("org_transfers")
         .where("orgId", "in", Object.keys(orgMap))
-        .orderBy("timestamp", "desc") // pour trier les plus récents
-        .limit(10) // limite pour éviter surcharge
+        .orderBy("timestamp", "desc")
+        .limit(10)
         .onSnapshot((snap) => {
-          snap.forEach(async (doc) => {
-            const data = doc.data();
-            if ((data.seenBy || []).includes(currentUser.displayName)) return;
+          snap.docChanges().forEach(async (change) => {
+            if (change.type === "added") {
+              const doc = change.doc;
+              const data = doc.data();
+              const seenBy = data.seenBy || [];
 
-            const orgName = orgMap[data.orgId] || "une organisation";
-            showNotification(`${data.from} a fait un virement de ${data.amount.toFixed(2)}µ à l'organisation ${orgName}`);
+              if (!seenBy.includes(userPseudo)) {
+                const orgName = orgMap[data.orgId] || "une organisation";
+                showNotification(`${data.from} a fait un virement de ${data.amount.toFixed(2)}µ à l'organisation ${orgName}`);
 
-            await db.collection("org_transfers").doc(doc.id).update({
-              seenBy: firebase.firestore.FieldValue.arrayUnion(currentUser.displayName)
-            });
+                await db.collection("org_transfers").doc(doc.id).update({
+                  seenBy: firebase.firestore.FieldValue.arrayUnion(userPseudo)
+                });
+              }
+            }
           });
         });
     });
 }
+
 
 
 async function loadOrganisations() {
