@@ -230,6 +230,7 @@ const db = firebase.firestore();
 
 let currentUser = null;
 
+// Récupération des éléments du DOM
 const loginBtn = document.getElementById('login-btn');
 const signupBtn = document.getElementById('signup-btn');
 const usernameInput = document.getElementById('username');
@@ -268,6 +269,7 @@ async function updateBalanceUI() {
   const balance = doc.exists ? doc.data().balance || 0 : 0;
   userBalance.textContent = balance.toFixed(2) + 'µ';
 }
+
 function listenToBalanceChanges() {
   const userRef = db.collection('users').doc(currentUser.displayName);
   userRef.onSnapshot(doc => {
@@ -284,7 +286,6 @@ function showNotification(msg) {
   chime.play();
   setTimeout(() => notif.style.display = 'none', 5000);
 }
-
 
 async function listenToIncomingTransfers() {
   db.collection('virements')
@@ -312,7 +313,6 @@ function listenToOrganisationTransfers() {
 
       if (Object.keys(orgMap).length === 0) return;
 
-      // Attention : on ne peut pas faire un .where("seenBy", "not-in", [...]) si liste vide → on vérifie manuellement
       db.collection("org_transfers")
         .where("orgId", "in", Object.keys(orgMap))
         .orderBy("timestamp", "desc")
@@ -337,8 +337,6 @@ function listenToOrganisationTransfers() {
         });
     });
 }
-
-
 
 async function loadOrganisations() {
   orgList.innerHTML = "<h3>Organisations</h3>";
@@ -366,9 +364,8 @@ async function loadOrganisations() {
     orgList.appendChild(div);
   });
 
-  // Ajout des listeners après génération
   document.querySelectorAll(".recuperer-btn").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
+    btn.addEventListener("click", async () => {
       const orgId = btn.dataset.orgid;
       const balance = parseFloat(btn.dataset.balance);
       const input = prompt("Combien voulez-vous récupérer ?");
@@ -387,12 +384,12 @@ async function loadOrganisations() {
       });
 
       updateBalanceUI();
-      loadOrganisations(); // Recharge les données
+      loadOrganisations();
     });
   });
 
   document.querySelectorAll(".ajouter-btn").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
+    btn.addEventListener("click", async () => {
       const orgId = btn.dataset.orgid;
       const pseudo = prompt("Pseudo de la personne à ajouter à l'organisation ?");
       if (!pseudo) return;
@@ -401,8 +398,7 @@ async function loadOrganisations() {
       const userSnap = await userRef.get();
       if (!userSnap.exists) return alert("Utilisateur introuvable.");
 
-      const orgRef = db.collection('organisations').doc(orgId);
-      await orgRef.update({
+      await db.collection('organisations').doc(orgId).update({
         members: firebase.firestore.FieldValue.arrayUnion(pseudo)
       });
 
@@ -411,7 +407,6 @@ async function loadOrganisations() {
     });
   });
 }
-
 
 async function loadOnlineUsers() {
   onlineUsers.innerHTML = "<h3>En ligne</h3>";
@@ -444,7 +439,7 @@ async function initApp() {
   loadOnlineUsers();
   listenToIncomingTransfers();
   listenToOrganisationTransfers();
-  listenToBalanceChanges(); // ← Ajout ici
+  listenToBalanceChanges();
   setInterval(loadOnlineUsers, 10000);
 }
 
@@ -452,11 +447,13 @@ loginBtn.onclick = async () => {
   try {
     const email = usernameInput.value + "@mail.com";
     const pass = passwordInput.value;
-    await auth.signInWithEmailAndPassword(email, pass);
-    currentUser = { displayName: usernameInput.value };
+    const cred = await auth.signInWithEmailAndPassword(email, pass);
+    currentUser = cred.user;
+    currentUser.displayName = usernameInput.value;
     await setOnlineStatus(true);
     initApp();
-  } catch {
+  } catch (e) {
+    console.error(e);
     alert("Erreur de connexion !");
   }
 };
@@ -465,14 +462,16 @@ signupBtn.onclick = async () => {
   try {
     const email = usernameInput.value + "@mail.com";
     const pass = passwordInput.value;
-    await auth.createUserWithEmailAndPassword(email, pass);
-    currentUser = { displayName: usernameInput.value };
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    currentUser = cred.user;
+    currentUser.displayName = usernameInput.value;
     await db.collection('users').doc(usernameInput.value).set({
       balance: 50,
       online: true
     });
     initApp();
-  } catch {
+  } catch (e) {
+    console.error(e);
     alert("Erreur d'inscription !");
   }
 };
@@ -494,110 +493,58 @@ document.getElementById('new-org').onclick = async () => {
 document.getElementById('virement').onclick = () => toggleModal(true);
 
 document.getElementById('confirm-virement').onclick = async () => {
-  try {
-    const montant = parseFloat(montantInput.value.replace(",", "."));
-    const destinataire = destinataireInput.value.trim();
-    const orgId = organisationSelect.value;
+  const montant = parseFloat(montantInput.value.replace(",", "."));
+  const destinataire = destinataireInput.value.trim();
+  const orgId = organisationSelect.value;
+  if (isNaN(montant) || montant <= 0) return;
 
-    if (isNaN(montant) || montant <= 0) return alert("Montant invalide !");
-    if (!currentUser) return alert("Utilisateur non connecté.");
+  const userRef = db.collection('users').doc(currentUser.displayName);
+  const userSnap = await userRef.get();
+  const solde = userSnap.data().balance || 0;
+  if (solde < montant) return alert("Pas assez d'argent !");
 
-    const userRef = db.collection('users').doc(currentUser.displayName);
-    const userSnap = await userRef.get();
-    const solde = userSnap.data().balance || 0;
-    if (solde < montant) return alert("Pas assez d'argent !");
-
-    if (destinataire) {
-      const destRef = db.collection('users').doc(destinataire);
-      const destSnap = await destRef.get();
-      if (destSnap.exists) {
-        await destRef.update({
-          balance: firebase.firestore.FieldValue.increment(montant)
-        });
-        await db.collection('virements').add({
-          to: destinataire,
-          from: currentUser.displayName,
-          amount: montant,
-          seen: false
-        });
-
-        await db.collection('logs').add({
-          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-          message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à ${destinataire}`
-        });
-      } else {
-        return alert("Destinataire introuvable !");
-      }
-    } else if (orgId) {
-      const orgRef = db.collection('organisations').doc(orgId);
-      const orgSnap = await orgRef.get();
-      const orgName = orgSnap.exists ? orgSnap.data().name : "une organisation";
-
-      await orgRef.update({
-        balance: firebase.firestore.FieldValue.increment(montant),
-        lastAmount: montant,
-        lastFrom: currentUser.displayName
+  if (destinataire) {
+    const destRef = db.collection('users').doc(destinataire);
+    const destSnap = await destRef.get();
+    if (destSnap.exists) {
+      await destRef.update({
+        balance: firebase.firestore.FieldValue.increment(montant)
       });
-
-      await db.collection('org_transfers').add({
-        orgId: orgId,
-        amount: montant,
+      await db.collection('virements').add({
+        to: destinataire,
         from: currentUser.displayName,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        seenBy: []
+        amount: montant,
+        seen: false
       });
-
       await db.collection('logs').add({
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à l'organisation ${orgName}`
+        message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à ${destinataire}`
       });
-    } else {
-      return alert("Veuillez saisir un destinataire ou choisir une organisation.");
     }
+  } else if (orgId) {
+    const orgRef = db.collection('organisations').doc(orgId);
+    const orgSnap = await orgRef.get();
+    const orgName = orgSnap.exists ? orgSnap.data().name : "une organisation";
 
-    await userRef.update({
-      balance: firebase.firestore.FieldValue.increment(-montant)
+    await orgRef.update({
+      balance: firebase.firestore.FieldValue.increment(montant),
+      lastAmount: montant,
+      lastFrom: currentUser.displayName
     });
 
-    toggleModal(false);
-    updateBalanceUI();
-    loadOrganisations();
-  } catch (err) {
-    console.error("Erreur lors du virement :", err);
-    alert("Une erreur est survenue lors du virement.");
-  }
-};
+    await db.collection('org_transfers').add({
+      orgId: orgId,
+      amount: montant,
+      from: currentUser.displayName,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      seenBy: []
+    });
 
-    // 🔹 Ajout du log personnel
     await db.collection('logs').add({
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à ${destinataire}`
+      message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à l'organisation ${orgName}`
     });
   }
-} else if (orgId) {
-  const orgRef = db.collection('organisations').doc(orgId);
-  const orgSnap = await orgRef.get();
-  const orgName = orgSnap.exists ? orgSnap.data().name : "une organisation";
-
-  await orgRef.update({
-    balance: firebase.firestore.FieldValue.increment(montant),
-    lastAmount: montant,
-    lastFrom: currentUser.displayName
-  });
-
-  await db.collection('org_transfers').add({
-    orgId: orgId,
-    amount: montant,
-    from: currentUser.displayName,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-    seenBy: []
-  });
-
-  // 🔹 Ajout du log organisation
-  await db.collection('logs').add({
-    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-    message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à l'organisation ${o
-
 
   await userRef.update({
     balance: firebase.firestore.FieldValue.increment(-montant)
@@ -608,9 +555,8 @@ document.getElementById('confirm-virement').onclick = async () => {
   loadOrganisations();
 };
 
+// Déconnexion propre à la fermeture de la page
 window.addEventListener("beforeunload", () => setOnlineStatus(false));
-
-
 
 </script>
 
