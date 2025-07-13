@@ -279,15 +279,24 @@ input[type="number"] {
       loadOrganisations();
     }
 
-    auth.onAuthStateChanged(async user => {
-      if (!user) return location.href = "/index.html";
-      const pseudo = user.displayName;
-      if (!allowedAdmins.includes(pseudo)) return location.href = "/maintenance.html";
-      showSection('users');
-      loadUsers();
-      loadOrganisations();
-      loadLogs();
-    });
+auth.onAuthStateChanged(async user => {
+  if (!user) return location.href = "/index.html";
+  const pseudo = user.displayName;
+
+  if (!allowedAdmins.includes(pseudo)) {
+    document.body.innerHTML = `<div style="color:white;text-align:center;padding:50px;">
+      <h1>Accès refusé</h1>
+      <p>Désolé ${pseudo}, tu n'es pas autorisé à accéder à cette page.</p>
+    </div>`;
+    return;
+  }
+
+  showSection('users');
+  loadUsers();
+  loadOrganisations();
+  loadLogs();
+});
+
   </script>
 </body>
 </html>
