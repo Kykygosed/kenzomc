@@ -88,31 +88,42 @@
       justify-content: space-between;
       align-items: center;
     }
-    .organisation-box {
-  border: 2px solid #000;
+.organisation-box {
+  border: 2px solid black;
   border-radius: 10px;
   padding: 15px;
-  margin-bottom: 15px;
-  background-color: #f0f0f0;
-  font-family: 'Press Start 2P', sans-serif;
-  font-size: 12px;
+  margin-bottom: 20px;
+  background-color: #e4e4e4;
+  font-family: 'Press Start 2P', cursive;
+  font-size: 10px;
 }
 
 .org-content {
-  margin-bottom: 10px;
+  margin-bottom: 15px;
+  line-height: 1.6;
 }
 
 .org-buttons {
   display: flex;
   gap: 10px;
   justify-content: center;
+  flex-wrap: wrap;
 }
 
 .org-buttons button {
-  font-family: 'Press Start 2P', sans-serif;
-  font-size: 10px;
-  padding: 5px 10px;
+  padding: 6px 12px;
+  font-family: 'Press Start 2P', cursive;
+  font-size: 9px;
+  border: none;
+  border-radius: 5px;
+  background-color: #000;
+  color: #fff;
   cursor: pointer;
+  transition: 0.2s;
+}
+
+.org-buttons button:hover {
+  background-color: #444;
 }
 
   </style>
@@ -287,8 +298,6 @@ async function loadOrganisations() {
     div.innerHTML = html;
     orgList.appendChild(div);
   });
-}
-
 
   // Ajout des listeners après génération
   document.querySelectorAll(".recuperer-btn").forEach(btn => {
@@ -311,7 +320,7 @@ async function loadOrganisations() {
       });
 
       updateBalanceUI();
-      loadOrganisations();
+      loadOrganisations(); // Recharge les données
     });
   });
 
