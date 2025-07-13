@@ -481,48 +481,64 @@ document.getElementById('new-org').onclick = async () => {
 
 document.getElementById('virement').onclick = () => toggleModal(true);
 
-document.getElementById('confirm-virement').onclick = async () => {
-  const montant = parseFloat(montantInput.value.replace(",", "."));
-  const destinataire = destinataireInput.value.trim();
+ddocument.getElementById("confirm-virement").addEventListener("click", async () => {
+  const montantStr = montantInput.value.trim().replace(",", "."); // Accepte virgule ou point
+  const montant = parseFloat(montantStr);
+  const to = destinataireInput.value.trim();
   const orgId = organisationSelect.value;
 
-  const userSnap = await db.ref(`users/${currentUser}/balance`).once('value');
-  const solde = userSnap.val() || 0;
-
-  if (isNaN(montant) || montant <= 0 || montant > solde) {
-    return showNotification("Montant invalide ou solde insuffisant !");
+  if (isNaN(montant) || montant <= 0) {
+    return showNotification("Montant invalide !");
   }
 
-  if (destinataire && orgId) {
-    return showNotification("Veuillez choisir soit un destinataire, soit une organisation, pas les deux !");
+  const userSnap = await db.ref(`users/${currentUser}`).once("value");
+  const currentBalance = parseFloat(userSnap.val()?.balance || 0);
+
+  if (!orgId && montant > currentBalance) {
+    return showNotification("Fonds insuffisants !");
   }
 
-  if (!destinataire && !orgId) {
-    return showNotification("Veuillez saisir un destinataire ou choisir une organisation.");
-  }
+  if (orgId) {
+    // Virement à une organisation
+    const orgSnap = await db.ref(`organisations/${orgId}`).once("value");
+    const orgBalance = parseFloat(orgSnap.val()?.balance || 0);
 
-  if (destinataire) {
-    const destSnap = await db.ref(`users/${destinataire}`).once('value');
-    if (!destSnap.exists()) return showNotification("Destinataire introuvable.");
-
-    const destBalance = destSnap.val().balance || 0;
-    await db.ref(`users/${destinataire}/balance`).set(destBalance + montant);
-    await db.ref('virements').push({
-      from: currentUser,
-      to: destinataire,
-      amount: montant,
-      seen: false
-    });
-  } else if (orgId) {
-    const orgSnap = await db.ref(`organisations/${orgId}/balance`).once('value');
-    const orgBalance = orgSnap.val() || 0;
     await db.ref(`organisations/${orgId}/balance`).set(orgBalance + montant);
     await db.ref(`org_transfers/${orgId}`).push({
       from: currentUser,
       amount: montant,
       seenBy: []
     });
+
+    if (montant > currentBalance) return showNotification("Fonds insuffisants !");
+    await db.ref(`users/${currentUser}/balance`).set(currentBalance - montant);
+    toggleModal(false);
+    return showNotification(`Virement de ${montant.toFixed(2)}µ vers l'organisation.`);
   }
+
+  if (!to) return showNotification("Pseudo destinataire requis.");
+
+  const receiverSnap = await db.ref(`users/${to}`).once("value");
+  if (!receiverSnap.exists()) return showNotification("Utilisateur introuvable.");
+
+  const receiverBalance = parseFloat(receiverSnap.val()?.balance || 0);
+
+  if (montant > currentBalance) {
+    return showNotification("Fonds insuffisants !");
+  }
+
+  await db.ref(`users/${to}/balance`).set(receiverBalance + montant);
+  await db.ref(`users/${currentUser}/balance`).set(currentBalance - montant);
+  await db.ref("virements").push({
+    from: currentUser,
+    to: to,
+    amount: montant,
+    seen: false
+  });
+
+  toggleModal(false);
+  showNotification(`Virement de ${montant.toFixed(2)}µ envoyé à ${to}`);
+});
 
   // Retirer le montant du solde utilisateur
   await db.ref(`users/${currentUser}/balance`).set(solde - montant);
