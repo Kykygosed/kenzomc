@@ -143,27 +143,52 @@ window.showSection = function(id) {
     });
   }
 
-  async function loadLogs() {
+async function loadLogs() {
   const container = document.getElementById('logs');
   container.innerHTML = '<h2>Logs</h2>';
-  const virementsQuery = query(ref(db, 'virements'), orderByChild('timestamp'), limitToLast(50));
-  onValue(virementsQuery, (snapshot) => {
-    container.innerHTML = '<h2>Logs</h2>';
-    const logs = [];
-    snapshot.forEach(child => {
+
+  const logs = [];
+
+  // Récupérer les virements classiques
+  const virementsSnap = await get(query(ref(db, 'virements'), limitToLast(50)));
+  if (virementsSnap.exists()) {
+    virementsSnap.forEach(child => {
       const data = child.val();
-      const from = data.from;
-      const to = data.to.startsWith("org:") ? "Organisation " + data.to.substring(4) : data.to;
-      logs.push(`[💸] ${from} → ${to} : ${data.amount.toFixed(2)}µ`);
+      if (!data.from || !data.to || !data.amount) return;
+      logs.push({
+        timestamp: data.timestamp || 0,
+        text: `[💸] ${data.from} → ${data.to} : ${data.amount.toFixed(2)}µ`
+      });
     });
-    logs.reverse().forEach(log => {
-      const div = document.createElement('div');
-      div.className = 'log-entry';
-      div.textContent = log;
-      container.appendChild(div);
-    });
+  }
+
+  // Récupérer les transferts vers les organisations
+  const orgsSnap = await get(ref(db, 'org_transfers'));
+  if (orgsSnap.exists()) {
+    const orgsData = orgsSnap.val();
+    for (const orgId in orgsData) {
+      const transfers = orgsData[orgId];
+      for (const key in transfers) {
+        const transfer = transfers[key];
+        if (!transfer.from || !transfer.amount) continue;
+        logs.push({
+          timestamp: transfer.timestamp || 0,
+          text: `[🏢] ${transfer.from} → Organisation ${orgId} : ${transfer.amount.toFixed(2)}µ`
+        });
+      }
+    }
+  }
+
+  // Tri et affichage
+  logs.sort((a, b) => b.timestamp - a.timestamp);
+  logs.slice(0, 50).forEach(log => {
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.textContent = log.text;
+    container.appendChild(div);
   });
 }
+
 
 
   // Action functions
