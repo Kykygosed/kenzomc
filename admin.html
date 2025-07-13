@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel</title>
+  <style>
+    body {
+      font-family: 'Press Start 2P', cursive;
+      margin: 0;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 250px;
+      background-color: #111;
+      color: white;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar button {
+      margin: 10px 0;
+      background-color: #222;
+      color: white;
+      border: none;
+      padding: 10px;
+      cursor: pointer;
+    }
+    .content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .user-item, .org-item, .log-entry {
+      background: #eee;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+    }
+    .balance {
+      cursor: pointer;
+      color: blue;
+      text-decoration: underline;
+    }
+    .members-list span {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <button onclick="showTab('users')">Utilisateurs</button>
+    <button onclick="showTab('orgs')">Organisations</button>
+    <button onclick="showTab('logs')">Logs</button>
+  </div>
+  <div class="content">
+    <div id="users-tab" style="display: none;"></div>
+    <div id="orgs-tab" style="display: none;"></div>
+    <div id="logs-tab" style="display: none;"></div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
+      authDomain: "kykychat-24c7f.firebaseapp.com",
+      projectId: "kykychat-24c7f",
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    const allowed = ["canari851", "kykygosed", "Kenzou_TV"];
+    let currentUser = null;
+
+    auth.onAuthStateChanged(async user => {
+      if (!user) {
+        window.location.href = "/index.html";
+        return;
+      }
+      const username = user.displayName;
+      if (!allowed.includes(username)) {
+        window.location.href = "/maintenance.html";
+        return;
+      }
+      currentUser = username;
+      loadUsers();
+      loadOrgs();
+      listenLogs();
+    });
+
+    function showTab(tab) {
+      document.getElementById('users-tab').style.display = 'none';
+      document.getElementById('orgs-tab').style.display = 'none';
+      document.getElementById('logs-tab').style.display = 'none';
+      document.getElementById(tab + '-tab').style.display = 'block';
+    }
+
+    async function loadUsers() {
+      const usersTab = document.getElementById('users-tab');
+      usersTab.innerHTML = '<h2>Utilisateurs</h2>';
+      const snap = await db.collection('users').get();
+      snap.forEach(doc => {
+        const div = document.createElement('div');
+        div.className = 'user-item';
+        div.innerHTML = `
+          <strong>${doc.id}</strong>
+          <button onclick="deleteUser('${doc.id}')">Supprimer</button>
+          Balance: <span class="balance" onclick="editBalance('${doc.id}', ${doc.data().balance || 0})">${(doc.data().balance || 0).toFixed(2)}µ</span>
+        `;
+        usersTab.appendChild(div);
+      });
+    }
+
+    async function deleteUser(id) {
+      if (confirm("Supprimer l'utilisateur ?")) {
+        await db.collection('users').doc(id).delete();
+        loadUsers();
+      }
+    }
+
+    async function editBalance(userId, current) {
+      const nv = parseFloat(prompt("Nouvelle balance", current).replace(",", "."));
+      if (!isNaN(nv)) {
+        await db.collection('users').doc(userId).update({ balance: nv });
+        loadUsers();
+      }
+    }
+
+    async function loadOrgs() {
+      const orgsTab = document.getElementById('orgs-tab');
+      orgsTab.innerHTML = '<h2>Organisations</h2>';
+      const snap = await db.collection('organisations').get();
+      snap.forEach(doc => {
+        const data = doc.data();
+        const div = document.createElement('div');
+        div.className = 'org-item';
+        const members = data.members || [];
+        div.innerHTML = `
+          <strong>${data.name}</strong> - Balance: <span class="balance" onclick="editOrgBalance('${doc.id}', ${data.balance})">${data.balance.toFixed(2)}µ</span>
+          <button onclick="deleteOrg('${doc.id}')">Supprimer</button><br>
+          Membres: <div class="members-list" id="members-${doc.id}">${members.map(m => `<span>${m} <button onclick=\"removeMember('${doc.id}','${m}')\">X</button></span>`).join('')}</div>
+          <input placeholder="Ajout membre" id="add-${doc.id}" /> <button onclick="addMember('${doc.id}')">Ajouter</button>
+        `;
+        orgsTab.appendChild(div);
+      });
+    }
+
+    async function deleteOrg(id) {
+      if (confirm("Supprimer cette organisation ?")) {
+        await db.collection('organisations').doc(id).delete();
+        loadOrgs();
+      }
+    }
+
+    async function editOrgBalance(orgId, current) {
+      const nv = parseFloat(prompt("Nouvelle balance", current).replace(",", "."));
+      if (!isNaN(nv)) {
+        await db.collection('organisations').doc(orgId).update({ balance: nv });
+        loadOrgs();
+      }
+    }
+
+    async function addMember(orgId) {
+      const input = document.getElementById(`add-${orgId}`);
+      const val = input.value.trim();
+      if (val) {
+        await db.collection('organisations').doc(orgId).update({
+          members: firebase.firestore.FieldValue.arrayUnion(val)
+        });
+        await db.collection('logs').add({
+          action: `${currentUser} a ajouté ${val} à l'organisation ${orgId}`,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        loadOrgs();
+      }
+    }
+
+    async function removeMember(orgId, userId) {
+      await db.collection('organisations').doc(orgId).update({
+        members: firebase.firestore.FieldValue.arrayRemove(userId)
+      });
+      loadOrgs();
+    }
+
+    function listenLogs() {
+      const logTab = document.getElementById('logs-tab');
+      db.collection('logs').orderBy('timestamp', 'desc').limit(50).onSnapshot(snapshot => {
+        logTab.innerHTML = '<h2>Logs</h2>';
+        snapshot.forEach(doc => {
+          const div = document.createElement('div');
+          div.className = 'log-entry';
+          div.textContent = doc.data().action;
+          logTab.appendChild(div);
+        });
+      });
+    }
+  </script>
+</body>
+</html>
