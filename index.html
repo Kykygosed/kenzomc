@@ -489,24 +489,44 @@ document.getElementById('confirm-virement').onclick = async () => {
   const userSnap = await db.ref(`users/${currentUser}/balance`).once('value');
   const solde = userSnap.val() || 0;
 
-  if (montant > solde || isNaN(montant) || montant <= 0) {
+  if (isNaN(montant) || montant <= 0 || montant > solde) {
     return showNotification("Montant invalide ou solde insuffisant !");
+  }
+
+  if (destinataire && orgId) {
+    return showNotification("Veuillez choisir soit un destinataire, soit une organisation, pas les deux !");
+  }
+
+  if (!destinataire && !orgId) {
+    return showNotification("Veuillez saisir un destinataire ou choisir une organisation.");
   }
 
   if (destinataire) {
     const destSnap = await db.ref(`users/${destinataire}`).once('value');
     if (!destSnap.exists()) return showNotification("Destinataire introuvable.");
 
-    await db.ref(`users/${destinataire}/balance`).set((destSnap.val().balance || 0) + montant);
-    await db.ref('virements').push({ from: currentUser, to: destinataire, amount: montant, seen: false });
+    const destBalance = destSnap.val().balance || 0;
+    await db.ref(`users/${destinataire}/balance`).set(destBalance + montant);
+    await db.ref('virements').push({
+      from: currentUser,
+      to: destinataire,
+      amount: montant,
+      seen: false
+    });
   } else if (orgId) {
     const orgSnap = await db.ref(`organisations/${orgId}/balance`).once('value');
-    const newOrgBal = (orgSnap.val() || 0) + montant;
-    await db.ref(`organisations/${orgId}/balance`).set(newOrgBal);
-    await db.ref(`org_transfers/${orgId}`).push({ from: currentUser, amount: montant, seenBy: [] });
+    const orgBalance = orgSnap.val() || 0;
+    await db.ref(`organisations/${orgId}/balance`).set(orgBalance + montant);
+    await db.ref(`org_transfers/${orgId}`).push({
+      from: currentUser,
+      amount: montant,
+      seenBy: []
+    });
   }
 
+  // Retirer le montant du solde utilisateur
   await db.ref(`users/${currentUser}/balance`).set(solde - montant);
+
   toggleModal(false);
   updateBalanceUI();
   loadOrganisations();
