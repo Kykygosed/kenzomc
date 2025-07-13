@@ -222,15 +222,15 @@ const firebaseConfig = {
   apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
   authDomain: "kykychat-24c7f.firebaseapp.com",
   projectId: "kykychat-24c7f",
+  databaseURL: "https://kykychat-24c7f-default-rtdb.firebaseio.com"
 };
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
-const db = firebase.firestore();
+const db = firebase.database();
 
 let currentUser = null;
 
-// Récupération des éléments du DOM
 const loginBtn = document.getElementById('login-btn');
 const signupBtn = document.getElementById('signup-btn');
 const usernameInput = document.getElementById('username');
@@ -252,32 +252,15 @@ function toggleModal(show = true) {
     montantInput.value = "";
     destinataireInput.value = "";
     organisationSelect.innerHTML = `<option value="">Aucune organisation</option>`;
-    db.collection('organisations').get().then(snapshot => {
-      snapshot.forEach(doc => {
+    db.ref('organisations').once('value', snapshot => {
+      snapshot.forEach(org => {
         const opt = document.createElement("option");
-        opt.value = doc.id;
-        opt.textContent = doc.data().name;
+        opt.value = org.key;
+        opt.textContent = org.val().name;
         organisationSelect.appendChild(opt);
       });
     });
   }
-}
-
-async function updateBalanceUI() {
-  const userRef = db.collection('users').doc(currentUser.displayName);
-  const doc = await userRef.get();
-  const balance = doc.exists ? doc.data().balance || 0 : 0;
-  userBalance.textContent = balance.toFixed(2) + 'µ';
-}
-
-function listenToBalanceChanges() {
-  const userRef = db.collection('users').doc(currentUser.displayName);
-  userRef.onSnapshot(doc => {
-    if (doc.exists) {
-      const balance = doc.data().balance || 0;
-      userBalance.textContent = balance.toFixed(2) + 'µ';
-    }
-  });
 }
 
 function showNotification(msg) {
@@ -287,64 +270,56 @@ function showNotification(msg) {
   setTimeout(() => notif.style.display = 'none', 5000);
 }
 
-async function listenToIncomingTransfers() {
-  db.collection('virements')
-    .where("to", "==", currentUser.displayName)
-    .where("seen", "==", false)
-    .onSnapshot(snapshot => {
-      snapshot.forEach(async doc => {
-        const data = doc.data();
-        showNotification(`${data.from} vous a envoyé ${data.amount.toFixed(2)}µ`);
-        await db.collection('virements').doc(doc.id).update({ seen: true });
-      });
-    });
+async function updateBalanceUI() {
+  const snap = await db.ref(`users/${currentUser}`).once('value');
+  const balance = snap.val()?.balance ?? 0;
+  userBalance.textContent = balance.toFixed(2) + 'µ';
+}
+
+function listenToBalanceChanges() {
+  db.ref(`users/${currentUser}/balance`).on('value', snap => {
+    const balance = snap.val() ?? 0;
+    userBalance.textContent = balance.toFixed(2) + 'µ';
+  });
+}
+
+function listenToIncomingTransfers() {
+  db.ref("virements").on('child_added', async snap => {
+    const data = snap.val();
+    if (data.to === currentUser && !data.seen) {
+      showNotification(`${data.from} vous a envoyé ${data.amount.toFixed(2)}µ`);
+      db.ref(`virements/${snap.key}/seen`).set(true);
+    }
+  });
 }
 
 function listenToOrganisationTransfers() {
-  const userPseudo = currentUser.displayName;
-
-  db.collection("organisations")
-    .where("members", "array-contains", userPseudo)
-    .onSnapshot((snapshot) => {
-      const orgMap = {};
-      snapshot.forEach((doc) => {
-        orgMap[doc.id] = doc.data().name;
-      });
-
-      if (Object.keys(orgMap).length === 0) return;
-
-      db.collection("org_transfers")
-        .where("orgId", "in", Object.keys(orgMap))
-        .orderBy("timestamp", "desc")
-        .limit(10)
-        .onSnapshot((snap) => {
-          snap.docChanges().forEach(async (change) => {
-            if (change.type === "added") {
-              const doc = change.doc;
-              const data = doc.data();
-              const seenBy = data.seenBy || [];
-
-              if (!seenBy.includes(userPseudo)) {
-                const orgName = orgMap[data.orgId] || "une organisation";
-                showNotification(`${data.from} a fait un virement de ${data.amount.toFixed(2)}µ à l'organisation ${orgName}`);
-
-                await db.collection("org_transfers").doc(doc.id).update({
-                  seenBy: firebase.firestore.FieldValue.arrayUnion(userPseudo)
-                });
-              }
-            }
+  db.ref(`users/${currentUser}/organisations`).on('value', snap => {
+    const orgs = snap.val() || {};
+    Object.keys(orgs).forEach(orgId => {
+      db.ref(`org_transfers/${orgId}`).on('child_added', transSnap => {
+        const trans = transSnap.val();
+        const seenBy = trans.seenBy || [];
+        if (!seenBy.includes(currentUser)) {
+          db.ref(`organisations/${orgId}/name`).once('value', nameSnap => {
+            const orgName = nameSnap.val() || "une organisation";
+            showNotification(`${trans.from} a versé ${trans.amount.toFixed(2)}µ à ${orgName}`);
+            db.ref(`org_transfers/${orgId}/${transSnap.key}/seenBy`).push(currentUser);
           });
-        });
+        }
+      });
     });
+  });
 }
 
 async function loadOrganisations() {
   orgList.innerHTML = "<h3>Organisations</h3>";
-  const snap = await db.collection('organisations')
-    .where('members', 'array-contains', currentUser.displayName).get();
+  const userOrgsSnap = await db.ref(`users/${currentUser}/organisations`).once('value');
+  const userOrgs = userOrgsSnap.val() || {};
 
-  snap.forEach(doc => {
-    const data = doc.data();
+  for (const orgId in userOrgs) {
+    const orgSnap = await db.ref(`organisations/${orgId}`).once('value');
+    const data = orgSnap.val();
     const div = document.createElement("div");
     div.classList.add("organisation-box");
 
@@ -355,14 +330,13 @@ async function loadOrganisations() {
         Balance: ${data.balance.toFixed(2)}µ
       </div>
       <div class="org-buttons">
-        <button class="recuperer-btn" data-orgid="${doc.id}" data-balance="${data.balance}">Récupérer</button>
-        <button class="ajouter-btn" data-orgid="${doc.id}">Ajouter membre</button>
+        <button class="recuperer-btn" data-orgid="${orgId}" data-balance="${data.balance}">Récupérer</button>
+        <button class="ajouter-btn" data-orgid="${orgId}">Ajouter membre</button>
       </div>
     `;
-
     div.innerHTML = html;
     orgList.appendChild(div);
-  });
+  }
 
   document.querySelectorAll(".recuperer-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
@@ -375,13 +349,10 @@ async function loadOrganisations() {
         return alert("Montant invalide !");
       }
 
-      await db.collection('organisations').doc(orgId).update({
-        balance: firebase.firestore.FieldValue.increment(-montant)
-      });
-
-      await db.collection('users').doc(currentUser.displayName).update({
-        balance: firebase.firestore.FieldValue.increment(montant)
-      });
+      await db.ref(`organisations/${orgId}/balance`).set(balance - montant);
+      const userSnap = await db.ref(`users/${currentUser}/balance`).once('value');
+      const newUserBalance = (userSnap.val() || 0) + montant;
+      await db.ref(`users/${currentUser}/balance`).set(newUserBalance);
 
       updateBalanceUI();
       loadOrganisations();
@@ -391,43 +362,31 @@ async function loadOrganisations() {
   document.querySelectorAll(".ajouter-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       const orgId = btn.dataset.orgid;
-      const pseudo = prompt("Pseudo de la personne à ajouter à l'organisation ?");
+      const pseudo = prompt("Pseudo à ajouter ?");
       if (!pseudo) return;
 
-      const userRef = db.collection('users').doc(pseudo);
-      const userSnap = await userRef.get();
-      if (!userSnap.exists) return alert("Utilisateur introuvable.");
+      const userSnap = await db.ref(`users/${pseudo}`).once('value');
+      if (!userSnap.exists()) return alert("Utilisateur introuvable.");
 
-      await db.collection('organisations').doc(orgId).update({
-        members: firebase.firestore.FieldValue.arrayUnion(pseudo)
-      });
-
+      await db.ref(`users/${pseudo}/organisations/${orgId}`).set(true);
       alert(`${pseudo} ajouté à l'organisation !`);
-      loadOrganisations();
     });
   });
 }
 
-async function loadOnlineUsers() {
+function loadOnlineUsers() {
   onlineUsers.innerHTML = "<h3>En ligne</h3>";
-  const snap = await db.collection('users').where('online', '==', true).get();
-  snap.forEach(doc => {
-    const div = document.createElement("div");
-    div.textContent = doc.id;
-    onlineUsers.appendChild(div);
+  db.ref("users").orderByChild("online").equalTo(true).once('value', snap => {
+    snap.forEach(userSnap => {
+      const div = document.createElement("div");
+      div.textContent = userSnap.key;
+      onlineUsers.appendChild(div);
+    });
   });
 }
 
 async function setOnlineStatus(status) {
-  if (currentUser) {
-    const userRef = db.collection('users').doc(currentUser.displayName);
-    const doc = await userRef.get();
-    const existingBalance = doc.exists && doc.data().balance !== undefined ? doc.data().balance : 50;
-    await userRef.set({
-      online: status,
-      balance: existingBalance
-    }, { merge: true });
-  }
+  await db.ref(`users/${currentUser}/online`).set(status);
 }
 
 async function initApp() {
@@ -447,13 +406,11 @@ loginBtn.onclick = async () => {
   try {
     const email = usernameInput.value + "@mail.com";
     const pass = passwordInput.value;
-    const cred = await auth.signInWithEmailAndPassword(email, pass);
-    currentUser = cred.user;
-    currentUser.displayName = usernameInput.value;
+    await auth.signInWithEmailAndPassword(email, pass);
+    currentUser = usernameInput.value;
     await setOnlineStatus(true);
     initApp();
-  } catch (e) {
-    console.error(e);
+  } catch {
     alert("Erreur de connexion !");
   }
 };
@@ -462,16 +419,14 @@ signupBtn.onclick = async () => {
   try {
     const email = usernameInput.value + "@mail.com";
     const pass = passwordInput.value;
-    const cred = await auth.createUserWithEmailAndPassword(email, pass);
-    currentUser = cred.user;
-    currentUser.displayName = usernameInput.value;
-    await db.collection('users').doc(usernameInput.value).set({
+    await auth.createUserWithEmailAndPassword(email, pass);
+    currentUser = usernameInput.value;
+    await db.ref(`users/${currentUser}`).set({
       balance: 50,
       online: true
     });
     initApp();
-  } catch (e) {
-    console.error(e);
+  } catch {
     alert("Erreur d'inscription !");
   }
 };
@@ -479,14 +434,13 @@ signupBtn.onclick = async () => {
 document.getElementById('new-org').onclick = async () => {
   const name = prompt("Nom de l'organisation");
   if (!name) return;
-  await db.collection('organisations').add({
+  const orgRef = db.ref('organisations').push();
+  await orgRef.set({
     name,
-    creator: currentUser.displayName,
-    balance: 0,
-    members: [currentUser.displayName],
-    lastAmount: 0,
-    lastFrom: ""
+    creator: currentUser,
+    balance: 0
   });
+  await db.ref(`users/${currentUser}/organisations/${orgRef.key}`).set(true);
   loadOrganisations();
 };
 
@@ -496,66 +450,29 @@ document.getElementById('confirm-virement').onclick = async () => {
   const montant = parseFloat(montantInput.value.replace(",", "."));
   const destinataire = destinataireInput.value.trim();
   const orgId = organisationSelect.value;
-  if (isNaN(montant) || montant <= 0) return;
 
-  const userRef = db.collection('users').doc(currentUser.displayName);
-  const userSnap = await userRef.get();
-  const solde = userSnap.data().balance || 0;
-  if (solde < montant) return alert("Pas assez d'argent !");
+  const userSnap = await db.ref(`users/${currentUser}/balance`).once('value');
+  const solde = userSnap.val() || 0;
+  if (montant > solde || isNaN(montant) || montant <= 0) return alert("Montant invalide ou solde insuffisant");
 
   if (destinataire) {
-    const destRef = db.collection('users').doc(destinataire);
-    const destSnap = await destRef.get();
-    if (destSnap.exists) {
-      await destRef.update({
-        balance: firebase.firestore.FieldValue.increment(montant)
-      });
-      await db.collection('virements').add({
-        to: destinataire,
-        from: currentUser.displayName,
-        amount: montant,
-        seen: false
-      });
-      await db.collection('logs').add({
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à ${destinataire}`
-      });
-    }
+    const destSnap = await db.ref(`users/${destinataire}`).once('value');
+    if (!destSnap.exists()) return alert("Destinataire introuvable.");
+
+    await db.ref(`users/${destinataire}/balance`).set((destSnap.val().balance || 0) + montant);
+    await db.ref('virements').push({ from: currentUser, to: destinataire, amount: montant, seen: false });
   } else if (orgId) {
-    const orgRef = db.collection('organisations').doc(orgId);
-    const orgSnap = await orgRef.get();
-    const orgName = orgSnap.exists ? orgSnap.data().name : "une organisation";
-
-    await orgRef.update({
-      balance: firebase.firestore.FieldValue.increment(montant),
-      lastAmount: montant,
-      lastFrom: currentUser.displayName
-    });
-
-    await db.collection('org_transfers').add({
-      orgId: orgId,
-      amount: montant,
-      from: currentUser.displayName,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      seenBy: []
-    });
-
-    await db.collection('logs').add({
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      message: `${currentUser.displayName} a fait un virement de ${montant.toFixed(2)}µ à l'organisation ${orgName}`
-    });
+    const orgSnap = await db.ref(`organisations/${orgId}/balance`).once('value');
+    await db.ref(`organisations/${orgId}/balance`).set((orgSnap.val() || 0) + montant);
+    await db.ref(`org_transfers/${orgId}`).push({ from: currentUser, amount: montant, seenBy: [] });
   }
 
-  await userRef.update({
-    balance: firebase.firestore.FieldValue.increment(-montant)
-  });
-
+  await db.ref(`users/${currentUser}/balance`).set(solde - montant);
   toggleModal(false);
   updateBalanceUI();
   loadOrganisations();
 };
 
-// Déconnexion propre à la fermeture de la page
 window.addEventListener("beforeunload", () => setOnlineStatus(false));
 
 </script>
