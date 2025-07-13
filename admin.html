@@ -1,205 +1,222 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Panel</title>
   <style>
     body {
-      font-family: 'Press Start 2P', cursive;
       margin: 0;
+      font-family: 'Press Start 2P', cursive;
+      background-color: #1e1e1e;
+      color: white;
       display: flex;
-      height: 100vh;
-      overflow: hidden;
     }
     .sidebar {
-      width: 250px;
-      background-color: #111;
-      color: white;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
+      width: 220px;
+      background: #111;
+      height: 100vh;
+      padding: 20px;
+      box-sizing: border-box;
     }
     .sidebar button {
-      margin: 10px 0;
-      background-color: #222;
+      display: block;
+      width: 100%;
+      margin-bottom: 15px;
+      background: #333;
       color: white;
       border: none;
       padding: 10px;
       cursor: pointer;
+      font-size: 10px;
     }
-    .content {
+    .main {
       flex: 1;
       padding: 20px;
       overflow-y: auto;
     }
-    .user-item, .org-item, .log-entry {
-      background: #eee;
-      padding: 10px;
+    .section {
+      display: none;
+    }
+    .section.active {
+      display: block;
+    }
+    .user-entry, .org-entry, .log-entry {
+      background: #292929;
       margin-bottom: 10px;
+      padding: 10px;
       border-radius: 5px;
     }
-    .balance {
-      cursor: pointer;
-      color: blue;
-      text-decoration: underline;
+    .user-entry span, .org-entry span {
+      margin-right: 10px;
     }
-    .members-list span {
-      display: block;
+    .member-list span {
+      display: inline-block;
+      margin: 5px;
+      background: #444;
+      padding: 3px 5px;
+      border-radius: 3px;
+    }
+    input[type="number"] {
+      width: 80px;
+      padding: 5px;
+      margin-left: 5px;
+    }
+    .action-btn {
+      margin-left: 10px;
+      background: #444;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 10px;
     }
   </style>
 </head>
 <body>
   <div class="sidebar">
-    <button onclick="showTab('users')">Utilisateurs</button>
-    <button onclick="showTab('orgs')">Organisations</button>
-    <button onclick="showTab('logs')">Logs</button>
+    <button onclick="showSection('users')">Utilisateurs</button>
+    <button onclick="showSection('orgs')">Organisations</button>
+    <button onclick="showSection('logs')">Logs</button>
   </div>
-  <div class="content">
-    <div id="users-tab" style="display: none;"></div>
-    <div id="orgs-tab" style="display: none;"></div>
-    <div id="logs-tab" style="display: none;"></div>
+  <div class="main">
+    <div id="users" class="section"></div>
+    <div id="orgs" class="section"></div>
+    <div id="logs" class="section"></div>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
-
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyBPq6Wfxzq02MfK69BFxHm9_FUjDGTmAcw",
       authDomain: "kykychat-24c7f.firebaseapp.com",
-      projectId: "kykychat-24c7f",
+      projectId: "kykychat-24c7f"
     };
     firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
-    const allowed = ["canari851", "kykygosed", "Kenzou_TV"];
-    let currentUser = null;
+    const allowedAdmins = ["canari851", "kykygosed", "Kenzou_TV"];
 
-    auth.onAuthStateChanged(async user => {
-      if (!user) {
-        window.location.href = "/index.html";
-        return;
-      }
-      const username = user.displayName;
-      if (!allowed.includes(username)) {
-        window.location.href = "/maintenance.html";
-        return;
-      }
-      currentUser = username;
-      loadUsers();
-      loadOrgs();
-      listenLogs();
-    });
-
-    function showTab(tab) {
-      document.getElementById('users-tab').style.display = 'none';
-      document.getElementById('orgs-tab').style.display = 'none';
-      document.getElementById('logs-tab').style.display = 'none';
-      document.getElementById(tab + '-tab').style.display = 'block';
+    function showSection(id) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
     }
 
     async function loadUsers() {
-      const usersTab = document.getElementById('users-tab');
-      usersTab.innerHTML = '<h2>Utilisateurs</h2>';
+      const container = document.getElementById('users');
+      container.innerHTML = '<h2>Utilisateurs</h2>';
       const snap = await db.collection('users').get();
       snap.forEach(doc => {
         const div = document.createElement('div');
-        div.className = 'user-item';
+        div.className = 'user-entry';
         div.innerHTML = `
-          <strong>${doc.id}</strong>
-          <button onclick="deleteUser('${doc.id}')">Supprimer</button>
-          Balance: <span class="balance" onclick="editBalance('${doc.id}', ${doc.data().balance || 0})">${(doc.data().balance || 0).toFixed(2)}µ</span>
+          <span>${doc.id}</span>
+          <span>Balance: <span id="bal-${doc.id}">${doc.data().balance?.toFixed(2) || 0}µ</span></span>
+          <button class="action-btn" onclick="setBalance('${doc.id}')">Modifier</button>
+          <button class="action-btn" onclick="deleteUser('${doc.id}')">Supprimer</button>
         `;
-        usersTab.appendChild(div);
+        container.appendChild(div);
       });
     }
 
-    async function deleteUser(id) {
-      if (confirm("Supprimer l'utilisateur ?")) {
-        await db.collection('users').doc(id).delete();
-        loadUsers();
-      }
-    }
-
-    async function editBalance(userId, current) {
-      const nv = parseFloat(prompt("Nouvelle balance", current).replace(",", "."));
-      if (!isNaN(nv)) {
-        await db.collection('users').doc(userId).update({ balance: nv });
-        loadUsers();
-      }
-    }
-
-    async function loadOrgs() {
-      const orgsTab = document.getElementById('orgs-tab');
-      orgsTab.innerHTML = '<h2>Organisations</h2>';
+    async function loadOrganisations() {
+      const container = document.getElementById('orgs');
+      container.innerHTML = '<h2>Organisations</h2>';
       const snap = await db.collection('organisations').get();
       snap.forEach(doc => {
         const data = doc.data();
         const div = document.createElement('div');
-        div.className = 'org-item';
-        const members = data.members || [];
+        div.className = 'org-entry';
+        const membersHTML = data.members.map(m => `<span>${m} <button onclick=\"removeMember('${doc.id}','${m}')\">✕</button></span>`).join(' ');
         div.innerHTML = `
-          <strong>${data.name}</strong> - Balance: <span class="balance" onclick="editOrgBalance('${doc.id}', ${data.balance})">${data.balance.toFixed(2)}µ</span>
-          <button onclick="deleteOrg('${doc.id}')">Supprimer</button><br>
-          Membres: <div class="members-list" id="members-${doc.id}">${members.map(m => `<span>${m} <button onclick=\"removeMember('${doc.id}','${m}')\">X</button></span>`).join('')}</div>
-          <input placeholder="Ajout membre" id="add-${doc.id}" /> <button onclick="addMember('${doc.id}')">Ajouter</button>
+          <strong>${data.name}</strong> (Balance: ${data.balance.toFixed(2)}µ)
+          <br><button class="action-btn" onclick="deleteOrg('${doc.id}')">Supprimer</button>
+          <button class="action-btn" onclick="modifyOrgBalance('${doc.id}')">Modifier balance</button>
+          <br><strong>Membres :</strong><div class="member-list">${membersHTML}</div>
+          <input type="text" id="add-${doc.id}" placeholder="@pseudo" style="width: 140px;" />
+          <button class="action-btn" onclick="addMember('${doc.id}')">Ajouter membre</button>
         `;
-        orgsTab.appendChild(div);
+        container.appendChild(div);
       });
     }
 
-    async function deleteOrg(id) {
-      if (confirm("Supprimer cette organisation ?")) {
-        await db.collection('organisations').doc(id).delete();
-        loadOrgs();
-      }
-    }
-
-    async function editOrgBalance(orgId, current) {
-      const nv = parseFloat(prompt("Nouvelle balance", current).replace(",", "."));
-      if (!isNaN(nv)) {
-        await db.collection('organisations').doc(orgId).update({ balance: nv });
-        loadOrgs();
-      }
-    }
-
-    async function addMember(orgId) {
-      const input = document.getElementById(`add-${orgId}`);
-      const val = input.value.trim();
-      if (val) {
-        await db.collection('organisations').doc(orgId).update({
-          members: firebase.firestore.FieldValue.arrayUnion(val)
-        });
-        await db.collection('logs').add({
-          action: `${currentUser} a ajouté ${val} à l'organisation ${orgId}`,
-          timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        loadOrgs();
-      }
-    }
-
-    async function removeMember(orgId, userId) {
-      await db.collection('organisations').doc(orgId).update({
-        members: firebase.firestore.FieldValue.arrayRemove(userId)
-      });
-      loadOrgs();
-    }
-
-    function listenLogs() {
-      const logTab = document.getElementById('logs-tab');
-      db.collection('logs').orderBy('timestamp', 'desc').limit(50).onSnapshot(snapshot => {
-        logTab.innerHTML = '<h2>Logs</h2>';
+    async function loadLogs() {
+      const container = document.getElementById('logs');
+      container.innerHTML = '<h2>Logs</h2>';
+      db.collection("logs").orderBy("timestamp", "desc").limit(50).onSnapshot(snapshot => {
+        container.innerHTML = '<h2>Logs</h2>';
         snapshot.forEach(doc => {
           const div = document.createElement('div');
           div.className = 'log-entry';
-          div.textContent = doc.data().action;
-          logTab.appendChild(div);
+          div.textContent = doc.data().message;
+          container.appendChild(div);
         });
       });
     }
+
+    async function setBalance(userId) {
+      const val = prompt("Nouvelle balance ? (en µ)");
+      const n = parseFloat(val);
+      if (isNaN(n)) return;
+      await db.collection("users").doc(userId).update({ balance: n });
+      document.getElementById("bal-"+userId).textContent = n.toFixed(2)+"µ";
+    }
+
+    async function deleteUser(userId) {
+      if (confirm("Supprimer cet utilisateur ?")) {
+        await db.collection("users").doc(userId).delete();
+        loadUsers();
+      }
+    }
+
+    async function deleteOrg(orgId) {
+      if (confirm("Supprimer cette organisation ?")) {
+        await db.collection("organisations").doc(orgId).delete();
+        loadOrganisations();
+      }
+    }
+
+    async function modifyOrgBalance(orgId) {
+      const val = prompt("Nouvelle balance ? (en µ)");
+      const n = parseFloat(val);
+      if (isNaN(n)) return;
+      await db.collection("organisations").doc(orgId).update({ balance: n });
+      loadOrganisations();
+    }
+
+    async function addMember(orgId) {
+      const input = document.getElementById("add-" + orgId);
+      const pseudo = input.value.trim();
+      if (!pseudo) return;
+      await db.collection("organisations").doc(orgId).update({
+        members: firebase.firestore.FieldValue.arrayUnion(pseudo)
+      });
+      await db.collection("logs").add({
+        message: `${auth.currentUser.displayName} a ajouté ${pseudo} à l'organisation ${orgId}`,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      loadOrganisations();
+    }
+
+    async function removeMember(orgId, pseudo) {
+      await db.collection("organisations").doc(orgId).update({
+        members: firebase.firestore.FieldValue.arrayRemove(pseudo)
+      });
+      loadOrganisations();
+    }
+
+    auth.onAuthStateChanged(async user => {
+      if (!user) return location.href = "/index.html";
+      const pseudo = user.displayName;
+      if (!allowedAdmins.includes(pseudo)) return location.href = "/maintenance.html";
+      showSection('users');
+      loadUsers();
+      loadOrganisations();
+      loadLogs();
+    });
   </script>
 </body>
 </html>
