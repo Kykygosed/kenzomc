@@ -481,8 +481,8 @@ document.getElementById('new-org').onclick = async () => {
 
 document.getElementById('virement').onclick = () => toggleModal(true);
 
-ddocument.getElementById("confirm-virement").addEventListener("click", async () => {
-  const montantStr = montantInput.value.trim().replace(",", "."); // Accepte virgule ou point
+document.getElementById("confirm-virement").addEventListener("click", async () => {
+  const montantStr = montantInput.value.trim().replace(",", ".");
   const montant = parseFloat(montantStr);
   const to = destinataireInput.value.trim();
   const orgId = organisationSelect.value;
@@ -494,12 +494,12 @@ ddocument.getElementById("confirm-virement").addEventListener("click", async () 
   const userSnap = await db.ref(`users/${currentUser}`).once("value");
   const currentBalance = parseFloat(userSnap.val()?.balance || 0);
 
-  if (!orgId && montant > currentBalance) {
-    return showNotification("Fonds insuffisants !");
-  }
-
   if (orgId) {
-    // Virement à une organisation
+    // Virement vers une organisation
+    if (montant > currentBalance) {
+      return showNotification("Fonds insuffisants !");
+    }
+
     const orgSnap = await db.ref(`organisations/${orgId}`).once("value");
     const orgBalance = parseFloat(orgSnap.val()?.balance || 0);
 
@@ -510,22 +510,24 @@ ddocument.getElementById("confirm-virement").addEventListener("click", async () 
       seenBy: []
     });
 
-    if (montant > currentBalance) return showNotification("Fonds insuffisants !");
     await db.ref(`users/${currentUser}/balance`).set(currentBalance - montant);
     toggleModal(false);
+    updateBalanceUI();
+    loadOrganisations();
     return showNotification(`Virement de ${montant.toFixed(2)}µ vers l'organisation.`);
   }
 
+  // Virement vers un autre utilisateur
   if (!to) return showNotification("Pseudo destinataire requis.");
 
   const receiverSnap = await db.ref(`users/${to}`).once("value");
   if (!receiverSnap.exists()) return showNotification("Utilisateur introuvable.");
 
-  const receiverBalance = parseFloat(receiverSnap.val()?.balance || 0);
-
   if (montant > currentBalance) {
     return showNotification("Fonds insuffisants !");
   }
+
+  const receiverBalance = parseFloat(receiverSnap.val()?.balance || 0);
 
   await db.ref(`users/${to}/balance`).set(receiverBalance + montant);
   await db.ref(`users/${currentUser}/balance`).set(currentBalance - montant);
@@ -537,16 +539,9 @@ ddocument.getElementById("confirm-virement").addEventListener("click", async () 
   });
 
   toggleModal(false);
+  updateBalanceUI();
   showNotification(`Virement de ${montant.toFixed(2)}µ envoyé à ${to}`);
 });
-
-  // Retirer le montant du solde utilisateur
-  await db.ref(`users/${currentUser}/balance`).set(solde - montant);
-
-  toggleModal(false);
-  updateBalanceUI();
-  loadOrganisations();
-};
 
 // Déconnexion automatique (mise en hors ligne)
 window.addEventListener("beforeunload", () => {
