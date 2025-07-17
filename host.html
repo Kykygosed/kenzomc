@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Panel Minecraft</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0e0e0e;
+      color: white;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 200px;
+      background: #1c1c1c;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.5);
+    }
+
+    .sidebar button {
+      background: #272727;
+      color: white;
+      border: none;
+      padding: 10px;
+      margin: 5px 0;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .sidebar button:hover {
+      background: #333;
+    }
+
+    .main {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    textarea {
+      width: 100%;
+      height: 250px;
+      background: #111;
+      color: #0f0;
+      font-family: monospace;
+      padding: 10px;
+    }
+
+    input, button {
+      margin: 5px;
+    }
+
+    .file-entry {
+      margin: 5px 0;
+    }
+
+    .stats {
+      background: #1a1a1a;
+      padding: 10px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+
+    .stat-row {
+      margin: 5px 0;
+    }
+
+    .status-dot {
+      font-size: 1.2em;
+    }
+
+    .bar {
+      background: #333;
+      border-radius: 5px;
+      height: 10px;
+      margin: 5px 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      background: #4caf50;
+      height: 100%;
+      width: 0%;
+    }
+
+    .bar-label {
+      font-size: 0.9em;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar">
+    <h3>🛠 Panel</h3>
+    <button onclick="switchTab('console')">🖥 Console</button>
+    <button onclick="switchTab('files')">📁 Fichiers</button>
+    <button onclick="refresh()">🔄 Rafraîchir</button>
+  </div>
+
+  <div class="main">
+    <div class="stats">
+      <div class="stat-row">Statut : <span id="statusDot" class="status-dot">⦿</span> <span id="statusText">...</span></div>
+      <div class="stat-row">RAM : <span id="ramUsed">0</span> / NaN Mo
+        <div class="bar"><div id="ramBar" class="bar-fill"></div></div>
+      </div>
+      <div class="stat-row">Disque : <span id="diskUsed">0</span> / NaN Go
+        <div class="bar"><div id="diskBar" class="bar-fill"></div></div>
+      </div>
+      <div class="stat-row">Réseau : ⬇ <span id="netIn">0</span> Ko/s | ⬆ <span id="netOut">0</span> Ko/s</div>
+    </div>
+
+    <div id="console" class="tab">
+      <h2>🖥 Console</h2>
+      <button onclick="start()">Démarrer</button>
+      <button onclick="stop()">Arrêter</button>
+      <textarea id="consoleLog" readonly></textarea>
+      <form onsubmit="sendCmd(); return false;">
+        <input id="cmd" placeholder="Commande..." />
+        <button>Envoyer</button>
+      </form>
+    </div>
+
+    <div id="files" class="tab hidden">
+      <h2>📁 Fichiers</h2>
+      <div id="filesList"></div>
+      <form id="uploadForm">
+        <input type="file" name="file" />
+        <button type="submit">Uploader</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+const backendUrl = "http://localhost:3000"; // Modifie selon ton backend
+const pass = "admin123"; // Mot de passe simple pour autorisation (à sécuriser)
+
+// Gestion du switch d'onglets
+function switchTab(tabId) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.add('hidden'));
+  document.getElementById(tabId).classList.remove('hidden');
+}
+
+// Rafraîchissement des stats et fichiers
+async function refresh() {
+  try {
+    // Récupérer status + stats serveur
+    const statusRes = await fetch(`${backendUrl}/status?pass=${pass}`);
+    if (!statusRes.ok) throw new Error("Status unreachable");
+    const status = await statusRes.json();
+
+    // Afficher statut serveur (vert, rouge, jaune)
+    const dot = document.getElementById("statusDot");
+    const text = document.getElementById("statusText");
+    if (status.online === true) {
+      dot.textContent = "●";
+      dot.style.color = "limegreen";
+      text.textContent = "En ligne";
+    } else if (status.online === false) {
+      dot.textContent = "●";
+      dot.style.color = "red";
+      text.textContent = "Hors ligne";
+    } else {
+      dot.textContent = "⦿";
+      dot.style.color = "yellow";
+      text.textContent = "Inconnu";
+    }
+
+    // Mise à jour RAM / disque / réseau (usage & max)
+    document.getElementById("ramUsed").textContent = status.ramUsed ?? 0;
+    // max NaN
+    const ramPerc = status.ramUsed ? Math.min((status.ramUsed / NaN) * 100, 100) : 0;
+    document.getElementById("ramBar").style.width = ramPerc + "%";
+
+    document.getElementById("diskUsed").textContent = status.diskUsed ?? 0;
+    const diskPerc = status.diskUsed ? Math.min((status.diskUsed / NaN) * 100, 100) : 0;
+    document.getElementById("diskBar").style.width = diskPerc + "%";
+
+    document.getElementById("netIn").textContent = status.netIn ?? 0;
+    document.getElementById("netOut").textContent = status.netOut ?? 0;
+
+  } catch(e) {
+    // En cas d'erreur, afficher statut inconnu
+    const dot = document.getElementById("statusDot");
+    const text = document.getElementById("statusText");
+    dot.textContent = "⦿";
+    dot.style.color = "yellow";
+    text.textContent = "Inconnu";
+  }
+
+  // Rafraîchir fichiers
+  try {
+    const filesRes = await fetch(`${backendUrl}/files?pass=${pass}`);
+    if (!filesRes.ok) throw new Error("Files unreachable");
+    const files = await filesRes.json();
+    const list = document.getElementById("filesList");
+    list.innerHTML = "";
+    files.forEach(f => {
+      const div = document.createElement("div");
+      div.classList.add("file-entry");
+      div.textContent = f;
+      list.appendChild(div);
+    });
+  } catch(e) {
+    document.getElementById("filesList").textContent = "Impossible de récupérer les fichiers.";
+  }
+}
+
+// Commandes console
+async function sendCmd() {
+  const cmdInput = document.getElementById("cmd");
+  const cmd = cmdInput.value.trim();
+  if (!cmd) return;
+  try {
+    const res = await fetch(`${backendUrl}/command?cmd=${encodeURIComponent(cmd)}&pass=${pass}`);
+    if (!res.ok) throw new Error("Serveur inaccessible");
+    const log = document.getElementById("consoleLog");
+    log.value += `\n> ${cmd}\n`;
+    cmdInput.value = "";
+    await refresh();
+  } catch(e) {
+    const log = document.getElementById("consoleLog");
+    log.value += `\n[ERREUR] Could not execute command '${cmd}' because the server was unreachable.\n`;
+    cmdInput.value = "";
+  }
+  // Scroll vers le bas
+  const log = document.getElementById("consoleLog");
+  log.scrollTop = log.scrollHeight;
+}
+
+// Démarrer le serveur
+async function start() {
+  try {
+    const res = await fetch(`${backendUrl}/start?pass=${pass}`);
+    if (!res.ok) throw new Error("Serveur inaccessible");
+    await refresh();
+  } catch(e) {
+    alert("Impossible de démarrer le serveur.");
+  }
+}
+
+// Arrêter le serveur
+async function stop() {
+  try {
+    const res = await fetch(`${backendUrl}/stop?pass=${pass}`);
+    if (!res.ok) throw new Error("Serveur inaccessible");
+    await refresh();
+  } catch(e) {
+    alert("Impossible d'arrêter le serveur.");
+  }
+}
+
+// Upload de fichier
+document.getElementById("uploadForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const fileInput = e.target.querySelector("input[type=file]");
+  if (!fileInput.files.length) return alert("Sélectionne un fichier.");
+
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+  formData.append("pass", pass);
+
+  try {
+    const res = await fetch(`${backendUrl}/upload`, {
+      method: "POST",
+      body: formData
+    });
+    if (!res.ok) throw new Error("Upload failed");
+    alert("Fichier uploadé !");
+    fileInput.value = "";
+    await refresh();
+  } catch(e) {
+    alert("Échec de l'upload.");
+  }
+});
+
+// Initialisation au chargement
+window.onload = () => {
+  switchTab("console");
+  refresh();
+  setInterval(refresh, 5000);
+};
+
+  </script>
+
+</body>
+</html>
